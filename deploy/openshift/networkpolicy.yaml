@@ -1,0 +1,22 @@
+# Ingress only, from the gateway namespace only, on the application port
+# only. An empty or missing policy here would leave the ClusterIP Service
+# reachable from every namespace in the cluster, which defeats the point of
+# not publishing a Route.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: omniflux-exchange
+spec:
+  podSelector:
+    matchLabels:
+      app: omniflux-exchange
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: api-gateway
+      ports:
+        - protocol: TCP
+          port: 8080

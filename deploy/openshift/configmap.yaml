@@ -1,0 +1,33 @@
+# Non-secret omniflux.* / infrastructure configuration only. No credential of
+# any kind belongs in a ConfigMap — see secret.example.yaml for the
+# credential-bearing keys, delivered instead through envFrom.secretRef in
+# deployment.yaml.
+#
+# OMNIFLUX_SECURITY_AUTH_MODE is pinned to HEADER here: v1 has no JWT
+# provider. The explicit non-JWT flag is safe only with the gateway and
+# namespace policy described in deployment.yaml.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: omniflux-exchange-config
+  labels:
+    app: omniflux-exchange
+data:
+  # Matches application-production.yml exactly so forwarded headers and ECS
+  # production logging cannot be skipped by profile-group configuration.
+  SPRING_PROFILES_ACTIVE: "production"
+  SPRING_R2DBC_URL: "r2dbc:postgresql://postgres.omniflux.svc.cluster.local:5432/omniflux"
+  SPRING_FLYWAY_URL: "jdbc:postgresql://postgres.omniflux.svc.cluster.local:5432/omniflux"
+  OMNIFLUX_STORAGE_ENDPOINT: "https://cos.example.internal"
+  # Browser-visible endpoint used in presigned URLs. Replace with the HTTPS
+  # object-storage gateway address reachable by analyst browsers.
+  OMNIFLUX_STORAGE_PUBLIC_ENDPOINT: "https://cos-download.example.internal"
+  OMNIFLUX_STORAGE_BUCKET: "omniflux"
+  OMNIFLUX_STORAGE_REGION: "us-east-1"
+  OMNIFLUX_SOURCE_REST_BASE_URL: "https://data-api.example.internal"
+  OMNIFLUX_SECURITY_AUTH_MODE: "HEADER"
+  OMNIFLUX_SECURITY_ALLOW_NON_JWT_AUTH: "true"
+  # The pod's only intended writable surface is the explicitly mounted /tmp
+  # tmpfs. Avoid AUTO: container proc mounts can be reported writable while
+  # remaining unreadable to the non-root runtime watcher.
+  OMNIFLUX_OBSERVABILITY_WATCH_PATHS: "/tmp"

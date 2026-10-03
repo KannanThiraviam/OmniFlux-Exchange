@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OmniFlux Exchange</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <div><h1>OmniFlux Exchange</h1></div>
+    <span id="auth-banner" class="banner" hidden></span>
+    <output id="toast" class="toast" aria-live="polite"></output>
+  </header>
+  <main class="shell">
+    <nav class="nav" aria-label="Primary">
+      <button class="nav-button active" data-view="data">Data</button>
+      <button class="nav-button" data-view="jobs">Jobs</button>
+      <button class="nav-button" data-view="system">System</button>
+    </nav>
+
+    <section id="view-data" class="view">
+      <div class="section-heading">
+        <div>
+          <h2>Your data</h2>
+          <p class="subline">Preview rows, filter them, and export exactly the set you see.</p>
+        </div>
+        <div class="section-actions">
+          <label class="compact-label">Table<select id="sel-relation" required></select></label>
+        </div>
+      </div>
+
+      <div class="card filter-card">
+        <div class="filter-grid">
+          <label>Column<select id="filter-column"></select></label>
+          <label>Operator<select id="filter-operator">
+            <option value="EQ">equals</option>
+            <option value="NE">does not equal</option>
+            <option value="GT">greater than</option>
+            <option value="GTE">at least</option>
+            <option value="LT">less than</option>
+            <option value="LTE">at most</option>
+            <option value="IN">is one of</option>
+          </select></label>
+          <label>Value<input id="filter-value" autocomplete="off"
+            placeholder="Value; for “is one of”, separate with commas"></label>
+          <button id="btn-add-filter" type="button">Add filter</button>
+        </div>
+        <div class="filter-list-bar">
+          <div id="filter-list" class="filter-list"></div>
+          <button id="btn-clear-filters" type="button" class="link-button" hidden>Remove all filters</button>
+        </div>
+      </div>
+
+      <div id="browse-table" class="card table-wrap"></div>
+      <div class="table-footer">
+        <button id="btn-prev-page" type="button" disabled>Previous page</button>
+        <span id="page-hint" class="page-hint" aria-live="polite"></span>
+        <button id="btn-next-page" type="button" disabled>Next page</button>
+      </div>
+
+      <div class="card export-card">
+        <div class="export-grid">
+          <label>Format<select id="sel-format">
+            <option>CSV</option>
+            <option>XLSX</option>
+          </select></label>
+          <label>Columns <span class="label-hint">optional — leave empty for all columns</span>
+            <input id="txt-columns" list="column-options" autocomplete="off"
+              placeholder="All columns">
+            <datalist id="column-options"></datalist>
+          </label>
+          <div class="export-cta">
+            <button id="btn-export" class="primary" type="button">Export all rows</button>
+          </div>
+        </div>
+        <p id="estimate-line" class="estimate"></p>
+        <p class="hint-note">CSV is written spreadsheet-safe automatically (formulas and stray control text neutralized). RAW CSV, when exact values are required, is available through the API.</p>
+        <output id="export-message" class="message"></output>
+      </div>
+    </section>
+
+    <section id="view-jobs" class="view" hidden>
+      <div class="section-heading">
+        <div>
+          <h2>Export jobs</h2>
+          <p class="subline">Every export streams to storage; download it here when it completes.</p>
+        </div>
+        <div class="section-actions">
+          <button id="btn-prev-jobs" type="button" disabled>Previous page</button>
+          <button id="btn-next-jobs" type="button" disabled>Next page</button>
+          <button id="btn-refresh-jobs" type="button">Refresh</button>
+        </div>
+      </div>
+      <div id="job-table" class="card table-wrap"></div>
+      <div id="attempt-panel" class="card attempt-panel" hidden>
+        <div class="attempt-heading">
+          <h3 id="attempt-title"></h3>
+          <button id="btn-close-attempts" type="button" class="link-button">Close</button>
+        </div>
+        <div id="attempt-table" class="table-wrap"></div>
+      </div>
+    </section>
+
+    <section id="view-system" class="view" hidden>
+      <div class="section-heading">
+        <div>
+          <h2>System</h2>
+          <p class="subline" id="system-asof"></p>
+        </div>
+        <div class="section-actions">
+          <button id="btn-refresh-system" type="button">Refresh</button>
+        </div>
+      </div>
+      <div id="system-grid" class="metric-grid"></div>
+    </section>
+  </main>
+
+  <dialog id="confirm-dialog" class="confirm-dialog">
+    <h3 id="confirm-title">Export this many rows?</h3>
+    <p id="confirm-text"></p>
+    <div class="dialog-actions">
+      <button id="btn-confirm-no" type="button">Keep editing</button>
+      <button id="btn-confirm-yes" type="button" class="primary">Export now</button>
+    </div>
+  </dialog>
+
+  <script src="/app.js"></script>
+</body>
+</html>

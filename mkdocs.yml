@@ -1,0 +1,77 @@
+site_name: OmniFlux Exchange
+site_description: Architecture, development, and operations for bounded streaming exports.
+site_url: https://kannanthiraviam.github.io/OmniFlux-Exchange/
+repo_url: https://github.com/KannanThiraviam/OmniFlux-Exchange
+repo_name: View source
+edit_uri: edit/main/docs/
+docs_dir: docs
+site_dir: .tmp_logs/docs-site
+use_directory_urls: true
+exclude_docs: |
+  /README.md
+  /ADR-INDEX.md
+  /superpowers/**
+  /assets/diagrams/docs-superpowers-*.svg
+  /evidence/**
+  /architecture/decision-log.md
+  /reviews/**
+theme:
+  name: material
+  font: false
+  logo: assets/logo.svg
+  favicon: assets/logo.svg
+  palette:
+    scheme: default
+    primary: custom
+    accent: custom
+  features:
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - toc.follow
+plugins:
+  - search
+hooks:
+  - scripts/docs_hooks.py
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: false
+      title: On this page
+  - pymdownx.details
+  - pymdownx.superfences
+extra_css:
+  - assets/stylesheets/docs.css
+validation:
+  nav:
+    omitted_files: ignore
+  links:
+    unrecognized_links: ignore
+    anchors: ignore
+nav:
+  - Documentation: index.md
+  - Get started:
+      - Key concepts: concepts.md
+      - Local setup: GETTING_STARTED.md
+      - API reference: API.md
+  - Architecture:
+      - Overview: architecture/overview.md
+      - Components and deployment: architecture/architecture.md
+      - Low-level design: architecture/low-level-design.md
+      - Principles and patterns: architecture/principles-and-patterns.md
+      - Data model: data-model.md
+      - Decision records: adr/README.md
+  - Develop:
+      - Quality gates: QUALITY_GATES.md
+      - Documentation maintenance: DOCUMENTATION.md
+      - Changelog: CHANGELOG.md
+  - Operate:
+      - Operations: OPERATIONS.md
+      - Threat model: THREAT_MODEL.md
+      - Implementation status: IMPLEMENTATION_STATUS.md

@@ -1,0 +1,36 @@
+// job/ErrorCode.java
+package com.omniflux.exchange.job;
+
+public enum ErrorCode {
+    UNKNOWN_RELATION(400, ErrorClass.DETERMINISTIC),
+    UNKNOWN_COLUMN(400, ErrorClass.DETERMINISTIC),
+    DUPLICATE_COLUMN(400, ErrorClass.DETERMINISTIC),
+    RELATION_NOT_ALLOWED(400, ErrorClass.DETERMINISTIC),
+    UNSUPPORTED_PRIMARY_KEY(400, ErrorClass.DETERMINISTIC),
+    UNSUPPORTED_COLUMN_TYPE(400, ErrorClass.DETERMINISTIC),
+    TOO_MANY_COLUMNS(400, ErrorClass.DETERMINISTIC),
+    TOO_MANY_IN_VALUES(400, ErrorClass.DETERMINISTIC),
+    FIELD_TOO_LARGE(400, ErrorClass.DETERMINISTIC),
+    ROW_TOO_LARGE(400, ErrorClass.DETERMINISTIC),
+    EXPORT_TOO_LARGE(400, ErrorClass.DETERMINISTIC),
+    XLSX_ROW_LIMIT(400, ErrorClass.DETERMINISTIC),
+    CHARACTER_NOT_REPRESENTABLE(400, ErrorClass.DETERMINISTIC),
+    IDEMPOTENCY_KEY_CONFLICT(409, ErrorClass.DETERMINISTIC),
+    QUEUE_FULL(429, ErrorClass.DETERMINISTIC),
+    CANCELLED(409, ErrorClass.DETERMINISTIC),
+    JOB_NOT_FOUND(404, ErrorClass.DETERMINISTIC),
+    PRINCIPAL_UNRESOLVED(401, ErrorClass.DETERMINISTIC),
+    VALIDATION_ERROR(400, ErrorClass.DETERMINISTIC),
+    INTERNAL_ERROR(500, ErrorClass.DETERMINISTIC),
+    UPSTREAM_CLIENT_ERROR(502, ErrorClass.DETERMINISTIC),
+    QUERY_TIMEOUT(504, ErrorClass.TRANSIENT),
+    UPSTREAM_UNAVAILABLE(503, ErrorClass.TRANSIENT),
+    STORAGE_UNAVAILABLE(503, ErrorClass.TRANSIENT),
+    LEASE_LOST(500, ErrorClass.TRANSIENT);
+
+    private final int status;
+    private final ErrorClass cls;
+    ErrorCode(int s, ErrorClass c) { status = s; cls = c; }
+    public int httpStatus() { return status; }
+    public ErrorClass errorClass() { return cls; }
+}

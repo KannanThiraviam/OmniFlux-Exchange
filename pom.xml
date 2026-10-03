@@ -1,0 +1,312 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>4.1.1</version><relativePath/>
+  </parent>
+
+  <groupId>com.omniflux</groupId>
+  <artifactId>omniflux-exchange</artifactId>
+  <version>0.1.0-SNAPSHOT</version>
+
+  <properties>
+    <java.version>25</java.version>
+    <maven.compiler.release>25</maven.compiler.release>
+    <!-- 2.55.0 lifts netty-codec-http 4.2.17 past an HTTP request-smuggling
+         advisory (SNYK-JAVA-IONETTY-19778369); keep s3 + netty-nio-client
+         aligned on the same SDK line. -->
+    <aws.sdk.version>2.55.0</aws.sdk.version>
+    <flyway.version>13.5.0</flyway.version>
+    <postgresql.version>42.7.13</postgresql.version>
+    <reactor-test.version>3.8.7</reactor-test.version>
+    <testcontainers.version>1.21.4</testcontainers.version>
+    <!-- Vulnerability floors (Snyk): scram < 3.3 fails open on auth errors,
+         jackson-databind 3.1.5 has unsafe-reflection + deserialization fixes
+         in 3.1.6. r2dbc-postgresql 1.1.2 is the newest 1.1.x, so SCRAM is
+         pinned here rather than bumped via the driver. logback 1.5.38 has a
+         directory-traversal advisory fixed in 1.6.3 (SNYK-JAVA-CHQOSLOGBACK-
+         19882330); Boot 4.1 manages 1.5.x, so the floor is raised here. -->
+    <ongres-scram.version>3.3</ongres-scram.version>
+    <jackson-databind.version>3.1.6</jackson-databind.version>
+    <logback.version>1.6.3</logback.version>
+    <!-- aws-sdk 2.55.0 still resolves netty-codec-http 4.2.17, which has the
+         HTTP request-smuggling advisory; the BOM floor lifts every netty
+         artifact to 4.2.18.Final together. -->
+    <netty.version>4.2.18.Final</netty.version>
+  </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty-bom</artifactId>
+        <version>${netty.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>com.ongres.scram</groupId>
+        <artifactId>scram-client</artifactId>
+        <version>${ongres-scram.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.ongres.scram</groupId>
+        <artifactId>scram-common</artifactId>
+        <version>${ongres-scram.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>tools.jackson.core</groupId>
+        <artifactId>jackson-databind</artifactId>
+        <version>${jackson-databind.version}</version>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <dependencies>
+    <dependency><groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-starter-webflux</artifactId></dependency>
+    <dependency><groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-starter-jackson</artifactId></dependency>
+    <dependency><groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-starter-actuator</artifactId></dependency>
+    <dependency><groupId>io.micrometer</groupId>
+                <artifactId>micrometer-registry-prometheus</artifactId></dependency>
+    <!-- 3.x is the Spring Boot 4 compatible SpringDoc line. -->
+    <dependency><groupId>org.springdoc</groupId>
+                <artifactId>springdoc-openapi-starter-webflux-ui</artifactId>
+                <version>3.1.1</version></dependency>
+    <dependency><groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-starter-data-r2dbc</artifactId></dependency>
+    <dependency><groupId>org.postgresql</groupId><artifactId>r2dbc-postgresql</artifactId>
+                <version>1.1.2.RELEASE</version></dependency>
+    <dependency><groupId>org.flywaydb</groupId><artifactId>flyway-core</artifactId>
+                <version>${flyway.version}</version></dependency>
+    <dependency><groupId>org.flywaydb</groupId>
+                <artifactId>flyway-database-postgresql</artifactId>
+                <version>${flyway.version}</version></dependency>
+    <!-- Boot 4 split Flyway's AUTO-CONFIGURATION into its own module. Without
+         it flyway-core sits on the classpath and NOTHING ever invokes it: the
+         app boots, SPRING_FLYWAY_* env vars are read by no one, and empty
+         databases stay empty (verified: no flyway_schema_history appeared). -->
+    <dependency><groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-flyway</artifactId></dependency>
+    <dependency><groupId>org.postgresql</groupId><artifactId>postgresql</artifactId>
+                <version>${postgresql.version}</version><scope>runtime</scope></dependency>
+    <dependency><groupId>software.amazon.awssdk</groupId><artifactId>s3</artifactId>
+                <version>${aws.sdk.version}</version></dependency>
+    <dependency><groupId>software.amazon.awssdk</groupId><artifactId>netty-nio-client</artifactId>
+                <version>${aws.sdk.version}</version></dependency>
+
+    <dependency><groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-starter-webflux-test</artifactId><scope>test</scope></dependency>
+    <dependency><groupId>io.projectreactor</groupId><artifactId>reactor-test</artifactId>
+                <version>${reactor-test.version}</version><scope>test</scope></dependency>
+    <dependency><groupId>org.testcontainers</groupId><artifactId>postgresql</artifactId>
+                <version>${testcontainers.version}</version><scope>test</scope></dependency>
+    <dependency><groupId>org.testcontainers</groupId><artifactId>junit-jupiter</artifactId>
+                <version>${testcontainers.version}</version><scope>test</scope></dependency>
+    <dependency><groupId>com.squareup.okhttp3</groupId><artifactId>mockwebserver</artifactId>
+                <version>5.5.0</version><scope>test</scope></dependency>
+    <!-- POI READS our OOXML in tests. Never a runtime dependency: its WRITING
+         path is what requires temp disk, which is why it was rejected. -->
+    <dependency><groupId>org.awaitility</groupId><artifactId>awaitility</artifactId>
+                <scope>test</scope></dependency>
+    <dependency><groupId>org.htmlunit</groupId><artifactId>htmlunit</artifactId>
+                <version>5.5.0</version><scope>test</scope></dependency>
+    <dependency><groupId>org.apache.poi</groupId><artifactId>poi-ooxml</artifactId>
+                <version>5.5.1</version><scope>test</scope></dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-checkstyle-plugin</artifactId>
+        <version>3.6.0</version>
+        <configuration>
+          <configLocation>config/checkstyle.xml</configLocation>
+          <includeTestSourceDirectory>true</includeTestSourceDirectory>
+          <consoleOutput>true</consoleOutput>
+          <failOnViolation>true</failOnViolation>
+        </configuration>
+        <executions><execution><id>java-lint</id><phase>validate</phase>
+          <goals><goal>check</goal></goals>
+        </execution></executions>
+      </plugin>
+      <plugin><groupId>org.springframework.boot</groupId>
+              <artifactId>spring-boot-maven-plugin</artifactId></plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-enforcer-plugin</artifactId><version>3.5.0</version>
+        <executions><execution><id>ban-servlet-stack</id><goals><goal>enforce</goal></goals>
+          <configuration><rules><bannedDependencies><excludes>
+            <exclude>org.springframework.boot:spring-boot-starter-web</exclude>
+            <exclude>org.springframework.boot:spring-boot-starter-tomcat</exclude>
+            <exclude>org.springframework:spring-webmvc</exclude>
+          </excludes>
+          <message>WebFlux only: with starter-web present Boot configures MVC.</message>
+          </bannedDependencies></rules><fail>true</fail></configuration>
+        </execution></executions>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <argLine>@{argLine} -XX:MaxDirectMemorySize=64m</argLine>
+          <trimStackTrace>false</trimStackTrace>
+        </configuration>
+      </plugin>
+
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <version>0.8.13</version>
+        <executions>
+          <execution>
+            <id>coverage-agent</id>
+            <goals><goal>prepare-agent</goal></goals>
+          </execution>
+          <execution>
+            <id>coverage-report</id>
+            <phase>verify</phase>
+            <goals><goal>report</goal></goals>
+          </execution>
+          <execution>
+            <id>coverage-check</id>
+            <phase>verify</phase>
+            <goals><goal>check</goal></goals>
+            <configuration>
+              <!-- Includes belong to the check mojo, where they select class
+                   files. Putting class patterns inside a BUNDLE rule matches
+                   the bundle name and silently checks the wrong population. -->
+              <includes>
+                <include>com/omniflux/exchange/export/ExportCacheResolver*</include>
+                <include>com/omniflux/exchange/export/ExportPipeline*</include>
+                <include>com/omniflux/exchange/export/ExportService*</include>
+                <include>com/omniflux/exchange/export/Fingerprint*</include>
+                <include>com/omniflux/exchange/writer/*</include>
+                <include>com/omniflux/exchange/upload/*</include>
+                <include>com/omniflux/exchange/source/*</include>
+                <include>com/omniflux/exchange/security/*</include>
+                <include>com/omniflux/exchange/adapter/r2dbc/PgDialect*</include>
+              </includes>
+              <rules>
+                <rule>
+                  <element>BUNDLE</element>
+                  <limits>
+                    <limit><counter>INSTRUCTION</counter><value>COVEREDRATIO</value><minimum>0.85</minimum></limit>
+                  </limits>
+                </rule>
+              </rules>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+
+  <profiles>
+    <profile>
+      <!-- SonarCloud scan: ./mvnw verify sonar:sonar -Psonar
+           with -Dsonar.token=... (or SONAR_TOKEN env). Org/project keys
+           live here so CI needs no extra flags; the token never does. -->
+      <id>sonar</id>
+      <properties>
+        <sonar.host.url>https://sonarcloud.io</sonar.host.url>
+        <sonar.organization>kannanthiraviam1982</sonar.organization>
+        <sonar.projectKey>KannanThiraviam_OmniFlux-Exchange</sonar.projectKey>
+        <!-- Policy: Sonar judges production code only. Test-code findings are
+             handled by the local gates (Checkstyle, PMD, the suite itself);
+             keeping tests out of the scan stops them from polluting the
+             maintainability conditions of the quality gate. Coverage is
+             unaffected: the JaCoCo report maps executed MAIN classes. -->
+        <sonar.tests></sonar.tests>
+        <sonar.exclusions>src/test/java/**</sonar.exclusions>
+        <sonar.coverage.jacoco.xmlReportPaths>target/site/jacoco/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
+      </properties>
+      <build><plugins>
+        <plugin>
+          <groupId>org.sonarsource.scanner.maven</groupId>
+          <artifactId>sonar-maven-plugin</artifactId>
+          <version>5.7.0.6970</version>
+        </plugin>
+      </plugins></build>
+    </profile>
+    <profile>
+      <!-- Dead-code audit (PMD unused-code rules) plus a dependency analysis
+           report. The commit gate runs this profile; a plain `mvn verify`
+           stays fast. dependency:analyze is deliberately report-only: in a
+           Boot-starter pom its categories are structural false positives
+           (starters aggregate, drivers SPI-load, auto-config invokes libs no
+           production source imports). -->
+      <id>code-audit</id>
+      <build><plugins>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-pmd-plugin</artifactId>
+          <version>3.28.0</version>
+          <configuration>
+            <rulesets><ruleset>config/pmd-unused-code.xml</ruleset></rulesets>
+            <failOnViolation>true</failOnViolation>
+          </configuration>
+          <executions>
+            <execution>
+              <id>pmd-unused-code</id>
+              <phase>verify</phase>
+              <goals><goal>pmd</goal><goal>check</goal></goals>
+            </execution>
+          </executions>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-dependency-plugin</artifactId>
+          <!-- 3.8.x bundles an ASM that cannot read Java 25 bytecode. -->
+          <version>3.10.0</version>
+          <executions>
+            <execution>
+              <id>dependency-analysis-report</id>
+              <phase>verify</phase>
+              <goals><goal>analyze</goal></goals>
+              <configuration>
+                <failOnWarning>false</failOnWarning>
+              </configuration>
+            </execution>
+          </executions>
+        </plugin>
+      </plugins></build>
+    </profile>
+    <profile>
+      <id>security-scan</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.owasp</groupId>
+            <artifactId>dependency-check-maven</artifactId>
+            <version>13.0.0</version>
+            <configuration>
+              <failBuildOnCVSS>7</failBuildOnCVSS>
+              <skipTestScope>true</skipTestScope>
+              <suppressionFiles>
+                <suppressionFile>config/dependency-check-suppressions.xml</suppressionFile>
+              </suppressionFiles>
+              <format>HTML</format>
+            </configuration>
+            <executions>
+              <execution>
+                <id>dependency-vulnerability-scan</id>
+                <phase>verify</phase>
+                <goals><goal>check</goal></goals>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
+</project>

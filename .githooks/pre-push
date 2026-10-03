@@ -1,0 +1,25 @@
+#!/bin/sh
+# Safety boundary only. Run the full local quality gate before pushing;
+# pre-commit checks staged whitespace and CI verifies main.
+remote_name="$1"
+
+is_agent_context() {
+  [ "${OFX_GIT_AGENT_CONTEXT:-}" = "1" ] && return 0
+  [ -n "${CODEX_THREAD_ID:-}" ] && return 0
+  [ -n "${CODEX_CI:-}" ] && return 0
+  [ -n "${CODEX_PROJECT_DIR:-}" ] && return 0
+  [ -n "${CLAUDE_PROJECT_DIR:-}" ] && return 0
+  [ -n "${CLAUDECODE:-}" ] && return 0
+  return 1
+}
+
+if is_agent_context; then
+  if [ "${OFX_ALLOW_GIT_PUSH:-}" != "1" ]; then
+    echo "BLOCKED: agent git push is disabled in this checkout." >&2
+    echo "Manual operator pushes are allowed; agents need OFX_ALLOW_GIT_PUSH=1." >&2
+    exit 1
+  fi
+fi
+
+# Reviewed changes are pushed directly to origin/main.
+exit 0

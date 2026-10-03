@@ -1,0 +1,14 @@
+# minAvailable: 2 of 3 replicas -- a voluntary node drain (or `oc adm drain`)
+# cannot take down more than one pod at a time, on top of the RollingUpdate
+# budget in deployment.yaml which governs deploys rather than drains.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: omniflux-exchange
+  labels:
+    app: omniflux-exchange
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: omniflux-exchange

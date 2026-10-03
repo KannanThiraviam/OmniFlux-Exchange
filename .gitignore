@@ -1,0 +1,28 @@
+target/
+*/target/
+.idea/
+.vscode/
+*.iml
+.env
+.sonar-token
+inspection-report/
+*.log
+*.dump
+*.hprof
+.playwright-cli/
+.tmp_logs/
+__pycache__/
+*.pyc
+# Local UI captures and agent-generated review artifacts are not project docs.
+.impeccable/
+docs/reviews/raw-logs/
+docs/reviews/patch-scripts/
+docs/reviews/prompts/
+
+# Agent planning and review working files stay local.
+.superpowers/
+.codex/
+.claude/
+docs/superpowers/
+docs/reviews/
+docs/assets/diagrams/docs-superpowers-*.svg

@@ -1,0 +1,184 @@
+spring:
+  application:
+    name: omniflux-exchange
+  main:
+    web-application-type: reactive
+  lifecycle:
+    timeout-per-shutdown-phase: 45s
+  r2dbc:
+    url: r2dbc:postgresql://localhost:5435/omniflux
+    username: omniflux
+    # No default: the credential comes from the environment (SPRING_R2DBC_PASSWORD)
+    password: "${SPRING_R2DBC_PASSWORD}"
+  flyway:
+    # Flyway is JDBC and STARTUP-ONLY. This defaults to the HOST port mapping
+    # (5435); the app container overrides it to the in-network address
+    # (postgres:5432) via SPRING_FLYWAY_URL, same as SPRING_R2DBC_URL above.
+    url: jdbc:postgresql://localhost:5435/omniflux
+    user: omniflux
+    password: "${SPRING_FLYWAY_PASSWORD}"
+    baseline-on-migrate: true            # init-db seeds the container at first boot
+    baseline-version: 1                  # so V1 is baselined there and applied on empty DBs
+
+server:
+  port: ${OMNIFLUX_APP_PORT:8080}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      group:
+        readiness:
+          include: readinessState,queueGate
+        liveness:
+          include: livenessState,ping
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+# ---------------------------------------------------------------------------
+# Application defaults; binding and validation live in OmnifluxProperties
+# and StartupValidator. Keep the maintained configuration guides in sync.
+# ---------------------------------------------------------------------------
+omniflux:
+  limits:
+    max-field-bytes: 64KB
+    max-row-bytes: 4MB                   # AGGREGATE across all fields in a row.
+                                         # Halved from 8MB in revision 14: it multiplies
+                                         # into BOTH large REST terms (codec x3.0 and
+                                         # decoded row x2.5), so 8MB put the rollup at
+                                         # 336MB against a 320MB heap — above the
+                                         # configured heap budget, with no room for GC.
+    allowed-control-chars: [ "\t", "\r", "\n" ]   # every other C0/C1 character is
+                                         # rejected with CHARACTER_NOT_REPRESENTABLE.
+                                         # Bounds JSON expansion at 3x (see below), and
+                                         # XLSX already could not represent them.
+  export:
+    fetch-buffer-budget: 8MB
+    bridge-chunk-size: 64KB
+    max-object-bytes: 64GB               # validated against 10,000 x part-size
+    default-format: CSV
+    csv-mode: SPREADSHEET_SAFE           # SPREADSHEET_SAFE | RAW
+    csv-dialect-version: 1
+    prefetch: 1                          # toStream(n). Reactor's default is 256.
+    scheduler: { threads: 4, queue-capacity: 8 }
+  storage:
+    endpoint: ${COS_ENDPOINT:http://localhost:9005}
+    public-endpoint: ${COS_PUBLIC_ENDPOINT:${COS_ENDPOINT:http://localhost:9005}}
+    bucket-expiry: 7d                    # Mirrors the bucket lifecycle contract.
+                                         # Provider lifecycle APIs vary and remain
+                                         # operator-managed; cache.ttl is validated
+                                         # against this configured retention window.
+    region: us-east-1
+    bucket: ${COS_BUCKET:omniflux}
+    access-key: "${COS_ACCESS_KEY}"
+    secret-key: "${COS_SECRET_KEY}"
+    path-style: true
+    part-size: 8MB
+    upload-buffer: 16MB                  # apiCallBufferSizeInBytes
+    api-call-timeout: 10m
+    presign-ttl: 15m
+    export-prefix: exports/
+  source:
+    default-adapter: rest                # rest | r2dbc
+    rest:
+      base-url: ${DATA_API_URL:http://localhost:3001}
+      auth:                              # the service's OWN M2M credential. A queued job
+        token-url: ${DATA_API_TOKEN_URL:}    # runs minutes later on another pod, so a user
+        client-id: ${DATA_API_CLIENT_ID:}    # token has expired and was never ours to hold.
+        client-secret: ${DATA_API_CLIENT_SECRET:}   # The job's captured PrincipalKey rides
+        scope: ${DATA_API_SCOPE:data.read}          # along as X-Asserted-* headers instead.
+      page-size: 5000                    # large: each page costs a round trip + auth
+      connect-timeout: 5s
+      response-timeout: 60s
+      max-retries: 3
+      wire-envelope-headroom: 1MB        # property names, punctuation, array syntax and the
+                                         # internally-selected PK. The FACTOR covers value
+                                         # escaping; with the factor alone a row of fully
+                                         # escaped values consumes the whole budget and the
+                                         # envelope itself has nowhere to go.
+      wire-envelope-factor: 6.0          # The worst case the FORMAT permits, not the one a
+                                         # server usually produces. RFC 8259 s7 allows ANY
+                                         # character to be written as \uXXXX, so one ASCII
+                                         # byte may arrive as six. 3.0 covered escaped
+                                         # surrogate pairs and assumed printable characters
+                                         # would come through raw -- an assumption about a
+                                         # server we do not own. See below.
+                                         # A 4-byte emoji escaped as a \uXXXX surrogate
+                                         # PAIR is 12 bytes: 3x. Quotes and backslashes
+                                         # are 2x. Control characters would be 6x, which
+                                         # is why they are REJECTED (limits.allowed-
+                                         # control-chars) rather than budgeted for:
+                                         # budgeting 6x costs 24MB of codec per job and
+                                         # the data is unexportable to CSV or XLSX anyway.
+      max-in-memory-size: 25MB           # = max-row-bytes x factor + headroom = 4x6.0 + 1.
+                                         # PER DECODED ELEMENT. It must EXCEED max-row-bytes:
+                                         # a row at exactly 8MB of source values is larger
+                                         # than 8MB on the wire, so an 8MB codec cap makes
+                                         # the largest LEGAL row unexportable — and it fails
+                                         # as a decode error rather than a typed limit.
+                                         # Set on the Data API WebClient, NOT globally:
+                                         # a global value also caps inbound request bodies.
+    r2dbc:
+      page-size: 1000                    # smaller: tighter memory bound
+  queue:
+    poll-interval: 2s
+    max-concurrent: 4                    # GLOBAL across pods, via admission_gate
+    max-depth: 500                       # QUEUED cap; over -> 429
+    lease-duration: 60s
+    lease-renew-interval: 15s
+    lease-renew-deadline: 45s
+    max-attempts: 3
+    sweep-interval: 30s
+    drain-timeout: 30s
+  cache:
+    enabled: false                       # D32: opt-in per relation
+    ttl: 1h                              # MUST be < the bucket's object expiry
+    relations: {}
+  xlsx:
+    max-data-rows: 1000000               # product limit; the header occupies row 1
+    max-cell-chars: 32767
+    compression-level: 6
+    date-mode: ISO_STRING
+    illegal-char-policy: REJECT
+  security:
+    auth-mode: DISABLED                  # DISABLED | HEADER | JWT
+    allow-non-jwt-auth: false            # demo profile sets true; production never does
+    dev-principal: { issuer: local, subject: dev@local, tenant: local, roles: [ANALYST] }
+    authz-context-version: v1            # DISABLED mode has no entitlement system;
+                                         # a constant is the honest representation.
+                                         # HEADER mode requires X-Auth-Authz-Version.
+    user-header-prefix: X-Auth-          # HEADER mode; the gateway MUST strip these inbound
+    mode: ALLOWLIST
+    allowed-relations: []                # Production starts with no business relations
+                                         # exposed. Demo explicitly enables mock_* below.
+    view-keys: {}                        # relation -> unique key column, for views
+    max-columns: 200
+    max-in-values: 100
+    query-timeout: 30s
+  seed:
+    batch-bytes: 32MB                    # the REAL bound. 5,000 rows is fine for the
+                                         # narrow demo relations and catastrophic for
+                                         # mock_wide, where it would retain 5,000 x 4MB.
+                                         # Batch size = min of batch-size and
+                                         # batch-bytes over estimated row width
+    batch-size: 5000                     # row-count cap, applied after the byte bound
+  observability:
+    fs-watch-mode: EVENTS                # WatchService events, never periodic sampling
+    watch-paths: AUTO                    # every writable mount; an explicit list overrides
+  resources:
+    java-expansion-factor: 2.5
+    measured-overhead: 8MB               # conservative; §11.3 replaces it with a measurement
+    jvm-baseline: 64MB
+    max-heap-budget: 320MB               # matches the container's -Xmx
+    non-heap-reserve: 96MB               # direct buffers + stacks + metaspace + code cache.
+                                         # heap(320) + this(96) = 416 < container(512)
+  ui: { page-size: 50, poll-interval: 1500ms }

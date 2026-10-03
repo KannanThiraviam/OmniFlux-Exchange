@@ -1,0 +1,12 @@
+server:
+  # Enable forwarded address rewriting only behind the production gateway.
+  # The ingress must reject direct pod access and overwrite client-supplied
+  # Forwarded/X-Forwarded-* headers before this value is trusted.
+  forward-headers-strategy: framework
+logging:
+  structured:
+    format:
+      console: ecs
+omniflux:
+  security:
+    allowed-relations: []

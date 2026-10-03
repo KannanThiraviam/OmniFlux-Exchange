@@ -1,0 +1,62 @@
+{
+  "README.md#1": {
+    "asset": "docs/assets/diagrams/README-01.svg",
+    "sha256": "2f3427a8bb1949d8766738c63de0a3d288f6576c54b1fd809682b2a784a3135e"
+  },
+  "docs/THREAT_MODEL.md#1": {
+    "asset": "docs/assets/diagrams/docs-THREAT_MODEL-01.svg",
+    "sha256": "088c6aa6b5f3e3543ccaedf6879bb7d13f409994d23c677ed3e06bc6ceb10061"
+  },
+  "docs/architecture/architecture.md#1": {
+    "asset": "docs/assets/diagrams/docs-architecture-architecture-01.svg",
+    "sha256": "e34ee4b2420115a75e687c36185d75c00c7202ce2bb94e8a8b348be731674b7c"
+  },
+  "docs/architecture/architecture.md#2": {
+    "asset": "docs/assets/diagrams/docs-architecture-architecture-02.svg",
+    "sha256": "dd8dde6fdaa0502fa5bc83eb8075bc10f3cc697097bb1856d9dd4f0667bf87dd"
+  },
+  "docs/architecture/architecture.md#3": {
+    "asset": "docs/assets/diagrams/docs-architecture-architecture-03.svg",
+    "sha256": "e369f231e70db3504b9274c5610daaeda1861a2eeed4be5c19297b303006948b"
+  },
+  "docs/architecture/low-level-design.md#1": {
+    "asset": "docs/assets/diagrams/docs-architecture-low-level-design-01.svg",
+    "sha256": "1949f897d24becb800247c48a0eea7a633341c30fd350f811d26853ecd5c68f8"
+  },
+  "docs/architecture/low-level-design.md#2": {
+    "asset": "docs/assets/diagrams/docs-architecture-low-level-design-02.svg",
+    "sha256": "96e3f5be5c5da21650e5a5da93a71131524cef178b30d1e4b9bab4ac8c890128"
+  },
+  "docs/architecture/low-level-design.md#3": {
+    "asset": "docs/assets/diagrams/docs-architecture-low-level-design-03.svg",
+    "sha256": "52007d35e4e12fe2b1edb02fceeeb1e01ee470398667866d6d42f671692e8a0c"
+  },
+  "docs/architecture/low-level-design.md#4": {
+    "asset": "docs/assets/diagrams/docs-architecture-low-level-design-04.svg",
+    "sha256": "5ae2233e93ae5c0ac270df24937f51d8bc1303bc0937196e83e14b42d1b2c98b"
+  },
+  "docs/architecture/low-level-design.md#5": {
+    "asset": "docs/assets/diagrams/docs-architecture-low-level-design-05.svg",
+    "sha256": "ba592a4e832b43ef99cffc5acc751f6878076294dc80b1296a02c83e95c4fe60"
+  },
+  "docs/architecture/low-level-design.md#6": {
+    "asset": "docs/assets/diagrams/docs-architecture-low-level-design-06.svg",
+    "sha256": "81fbbdb61be130ea141538ebd05bfab32fc3146003a175efe27abc79b1f03c8e"
+  },
+  "docs/architecture/overview.md#1": {
+    "asset": "docs/assets/diagrams/docs-architecture-overview-01.svg",
+    "sha256": "438996e4285e699c3615224214ddd8ea8c98e044aa55c6b32fdbba9633e8b1d9"
+  },
+  "docs/architecture/overview.md#2": {
+    "asset": "docs/assets/diagrams/docs-architecture-overview-02.svg",
+    "sha256": "28c6472e0842d3fa428c82c70c841b9bed656ffade9dad7f272511e1e770be18"
+  },
+  "docs/architecture/principles-and-patterns.md#1": {
+    "asset": "docs/assets/diagrams/docs-architecture-principles-and-patterns-01.svg",
+    "sha256": "3d8b8b5acf85fedbe7712a5effbb0b64c7951a37010efd9436ff637e618a0151"
+  },
+  "docs/data-model.md#1": {
+    "asset": "docs/assets/diagrams/docs-data-model-01.svg",
+    "sha256": "720968cc998bf0e0c791c3ec4a777393b7ba3c165dcfb972a2f717700081ee2d"
+  }
+}

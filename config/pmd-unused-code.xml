@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<ruleset name="unused-code"
+         xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+  <description>Dead-code audit (the vulture analog): unused private members,
+    locals, and assignments. Production scope only; the public surface of a
+    service seam may legitimately wait for its consumer.</description>
+  <rule ref="category/java/bestpractices.xml/UnusedPrivateMethod"/>
+  <rule ref="category/java/bestpractices.xml/UnusedPrivateField"/>
+  <rule ref="category/java/bestpractices.xml/UnusedLocalVariable"/>
+  <rule ref="category/java/bestpractices.xml/UnusedAssignment"/>
+</ruleset>

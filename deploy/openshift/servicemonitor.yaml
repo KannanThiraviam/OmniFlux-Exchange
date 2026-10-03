@@ -1,0 +1,14 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: omniflux-exchange
+  labels:
+    app: omniflux-exchange
+spec:
+  selector:
+    matchLabels:
+      app: omniflux-exchange
+  endpoints:
+    - port: http
+      path: /actuator/prometheus
+      interval: 30s

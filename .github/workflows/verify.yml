@@ -1,0 +1,52 @@
+name: verify
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  maven-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Verify with hermetic Testcontainers dependencies
+        env:
+          OMNIFLUX_OBSERVABILITY_WATCH_PATHS: ${{ runner.temp }}
+        run: bash ./mvnw --batch-mode --no-transfer-progress verify -Pcode-audit
+      - name: Build OCI application image
+        run: >-
+          docker compose --env-file .env.example build
+          --build-arg VERSION=0.1.0-SNAPSHOT
+          --build-arg VCS_REF=${GITHUB_SHA}
+          --build-arg BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          app
+      - name: Start the full stack
+        run: docker compose --env-file .env.example up -d
+      - name: Wait for application health
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://localhost:8080/actuator/health >/dev/null; then
+              exit 0
+            fi
+            sleep 3
+          done
+          docker compose --env-file .env.example ps
+          exit 1
+      - name: Smoke test CSV and XLSX exports
+        run: bash scripts/smoke-full-stack.sh
+      - name: Show container logs on failure
+        if: failure()
+        run: docker compose --env-file .env.example logs --tail 250 --no-color || true
+      - name: Stop the smoke stack
+        if: always()
+        run: docker compose --env-file .env.example down --volumes --remove-orphans

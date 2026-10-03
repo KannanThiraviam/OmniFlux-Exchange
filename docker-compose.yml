@@ -1,0 +1,289 @@
+# =============================================================================
+# OmniFlux-Exchange — Full Local Stack
+# =============================================================================
+#
+# FULL STACK, one shot (creates .env on first run, then builds and starts):
+#   pwsh -File scripts/up.ps1 -Build     # Windows
+#   ./scripts/up.sh                      # Linux / macOS / Git Bash
+#   docker compose logs -f app
+#
+# DEV LOOP (the app runs from Maven; note the explicit service list, or compose
+# would ALSO start the app and both would fight over port 8080):
+#   docker compose up -d postgres seaweedfs createbucket postgrest
+#   ./mvnw spring-boot:run -Dspring-boot.run.profiles=demo
+#
+# The demo profile is required outside Docker: it sets
+# security.allow-non-jwt-auth=true, without which StartupValidator refuses to
+# boot in DISABLED auth mode. The app SERVICE below sets it via an env var.
+#
+#   docker compose down           # stop
+#   docker compose down -v        # stop and wipe data
+#
+# Endpoints once healthy:
+#   http://localhost:8080          OmniFlux dashboard
+#   http://localhost:9006          SeaweedFS master diagnostics endpoint
+#   http://localhost:3001          PostgREST — stands in for the org Data API
+#   postgres://omniflux@localhost:5435/omniflux
+#
+# Host ports are configurable in .env; container ports use service defaults.
+# Override any of them in a .env file:
+#   OMNIFLUX_POSTGRES_PORT / OMNIFLUX_S3_PORT / OMNIFLUX_SEAWEEDFS_MASTER_PORT
+#   OMNIFLUX_POSTGREST_PORT / OMNIFLUX_APP_PORT
+# Container-internal ports are unchanged, so service-to-service URLs below
+# (postgres:5432, seaweedfs:8333, postgrest:3000) stay standard.
+#
+# No secrets manager here on purpose: every credential is a local throwaway.
+# NONE are hardcoded in this file — all come from environment variables so no
+# scanner (or git history) ever sees a literal. Compose reads the five
+# OMNIFLUX_* credential variables from the process environment or from a .env
+# file next to this one (.env.example documents all five; the variables are
+# required — compose refuses to start with any of them missing).
+#
+# =============================================================================
+
+name: omniflux
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL 18.6 — business data AND the control table
+  # ---------------------------------------------------------------------------
+  # Schema is created at FIRST BOOT from ./init-db, before anything else starts.
+  # This ordering is load-bearing: PostgREST caches the schema when it connects,
+  # so the relations must exist before it comes up or they stay invisible until
+  # a manual reload. Flyway baselines the bootstrap schema at V1 and applies
+  # subsequent migrations; it is not a no-op against an initialized database.
+  postgres:
+    image: postgres:18.6
+    # PG18 adds server-side ASYNCHRONOUS I/O. This is separate from the client
+    # being async: the application already uses R2DBC end to end, with no JDBC
+    # on the data path. io_method=worker is PG18's default and portable;
+    # io_uring is Linux-only and can be swapped in where the host supports it.
+    command: >
+      postgres
+      -c io_method=worker
+      -c max_wal_size=2GB
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: omniflux
+      POSTGRES_USER: omniflux
+      POSTGRES_PASSWORD: ${OMNIFLUX_DB_PASSWORD:?OMNIFLUX_DB_PASSWORD missing — set it (see .env.example)}
+    ports:
+      - "${OMNIFLUX_POSTGRES_PORT:-5435}:5432"
+    volumes:
+      # PG18 CHANGED THIS. The image refuses to start against a
+      # /var/lib/postgresql/data mount and asks for a single mount at
+      # /var/lib/postgresql, so pg_upgrade --link works without crossing a
+      # mount boundary. (Same form card-fraud-platform already uses.)
+      - postgres_data:/var/lib/postgresql
+      - ./init-db:/docker-entrypoint-initdb.d:ro
+    networks:
+      - omniflux-network
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U omniflux -d omniflux"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # ---------------------------------------------------------------------------
+  # SeaweedFS — local S3-compatible object storage for development/tests
+  # ---------------------------------------------------------------------------
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.44@sha256:e67e8c385484120b78bff47ba5f4debbca47fbd27ed1a39f016f47e8baea615b
+    restart: unless-stopped
+    command: ["mini", "-dir=/data"]
+    environment:
+      AWS_ACCESS_KEY_ID: ${OMNIFLUX_S3_ACCESS_KEY:?OMNIFLUX_S3_ACCESS_KEY missing — see .env.example}
+      AWS_SECRET_ACCESS_KEY: ${OMNIFLUX_S3_SECRET_KEY:?OMNIFLUX_S3_SECRET_KEY missing — see .env.example}
+    ports:
+      - "${OMNIFLUX_S3_PORT:-${OMNIFLUX_MINIO_PORT:-9005}}:8333" # S3 API
+      - "${OMNIFLUX_SEAWEEDFS_MASTER_PORT:-9006}:9333" # SeaweedFS master UI/API
+    volumes:
+      - seaweedfs_data:/data
+    networks:
+      - omniflux-network
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9333/cluster/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # ---------------------------------------------------------------------------
+  # Bucket setup — one-shot
+  # ---------------------------------------------------------------------------
+  # Creates the bucket and sets expiry for completed export objects. Orphaned
+  # multipart uploads are reconciled by the application on startup.
+  createbucket:
+    image: amazon/aws-cli:2.27.41
+    depends_on:
+      seaweedfs:
+        condition: service_healthy
+    networks:
+      - omniflux-network
+    entrypoint: ["/bin/sh"]
+    command:
+      - "-ec"
+      - |
+        export AWS_ACCESS_KEY_ID='${OMNIFLUX_S3_ACCESS_KEY:?OMNIFLUX_S3_ACCESS_KEY missing — see .env.example}'
+        export AWS_SECRET_ACCESS_KEY='${OMNIFLUX_S3_SECRET_KEY:?OMNIFLUX_S3_SECRET_KEY missing — see .env.example}'
+        export AWS_DEFAULT_REGION=us-east-1
+        aws --endpoint-url http://seaweedfs:8333 s3api head-bucket --bucket omniflux >/dev/null 2>&1 || aws --endpoint-url http://seaweedfs:8333 s3api create-bucket --bucket omniflux
+        aws --endpoint-url http://seaweedfs:8333 s3api put-bucket-lifecycle-configuration --bucket omniflux --lifecycle-configuration '{"Rules":[{"ID":"abort-incomplete-uploads","Status":"Enabled","Filter":{"Prefix":"exports/"},"AbortIncompleteMultipartUpload":{"DaysAfterInitiation":1}},{"ID":"exports-expire-7d","Status":"Enabled","Filter":{"Prefix":"exports/"},"Expiration":{"Days":7}}]}'
+        echo '[createbucket] bucket omniflux ready; lifecycle rules installed.'
+
+  # ---------------------------------------------------------------------------
+  # PostgREST — stands in for the organization's dynamic Data API
+  # ---------------------------------------------------------------------------
+  # One relation per endpoint, keyset-friendly query params. This is what
+  # RestRowSource targets, so the local demo exercises the same adapter
+  # that production uses rather than a JDBC-only shortcut.
+  postgrest:
+    image: postgrest/postgrest:v12.2.3
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGRST_DB_URI: postgres://omniflux:${OMNIFLUX_DB_PASSWORD:?OMNIFLUX_DB_PASSWORD missing — set it (see .env.example)}@postgres:5432/omniflux
+      PGRST_DB_SCHEMAS: public
+      PGRST_DB_ANON_ROLE: omniflux
+      PGRST_DB_POOL: 10
+      PGRST_SERVER_PORT: 3000
+      # The demo REST adapter sends a service bearer token. This is a
+      # throwaway local JWT so PostgREST accepts that header without turning
+      # the local stack into an unauthenticated HTTP path. The token must be
+      # signed with the secret below (see .env.example for how to generate).
+      PGRST_JWT_SECRET: ${OMNIFLUX_PGRST_JWT_SECRET:?OMNIFLUX_PGRST_JWT_SECRET missing — set it (see .env.example)}
+      # Admin server exposes /live and /ready for EXTERNAL probes. There is no
+      # in-container healthcheck below because the postgrest image is
+      # DISTROLESS: no shell, no wget, no curl. Any CMD or CMD-SHELL check fails
+      # with "stat /bin/sh: no such file or directory", the container is marked
+      # unhealthy forever, and `depends_on: service_healthy` would block the app
+      # from ever starting. Verified, not assumed.
+      PGRST_ADMIN_SERVER_PORT: 3001
+    ports:
+      - "${OMNIFLUX_POSTGREST_PORT:-3001}:3000"
+      - "${OMNIFLUX_POSTGREST_ADMIN_PORT:-3002}:3001"
+    networks:
+      - omniflux-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 256M
+
+  # ---------------------------------------------------------------------------
+  # OmniFlux-Exchange — the service
+  # ---------------------------------------------------------------------------
+  # The container limits below are not housekeeping, they ARE the proof harness.
+  #
+  #   memory: 512M    the pod-level bound. If streaming leaks, the CONTAINER is
+  #                   OOM-killed — external, unfakeable evidence that beats any
+  #                   assertion the process makes about its own heap.
+  #   read_only: true no writable root filesystem. The zero-disk claim is
+  #                   enforced at the container boundary rather than asserted.
+  #   tmpfs 16m       deliberately tiny. Anything that tries to spool fails
+  #                   loudly instead of quietly eating ephemeral storage.
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # NO container_name. A fixed name makes `--scale app=2` fail outright, and
+    # the two-replica check (Task 13) is how cross-pod admission is proven at the
+    # compose level. The other services keep their names; only this one scales.
+    #
+    # Scaling also needs the FIXED HOST PORT gone -- two replicas cannot both
+    # publish 8080 -- so the two-replica run uses the override file:
+    #   docker compose -f docker-compose.yml -f docker-compose.scale.yml     #                  up -d --scale app=2
+    # docker-compose.scale.yml drops `ports:` from app; the replicas are reached
+    # over the internal network, which is all the admission check needs.
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      seaweedfs:
+        condition: service_healthy
+      createbucket:
+        condition: service_completed_successfully
+      # service_started, not service_healthy: the image cannot host a healthcheck
+      # (see the postgrest service). The app tolerates this — the R2DBC adapter
+      # needs no Data API, and the REST adapter retries 5xx/connection failures.
+      postgrest:
+        condition: service_started
+    environment:
+      SPRING_R2DBC_URL: r2dbc:postgresql://postgres:5432/omniflux
+      SPRING_R2DBC_USERNAME: omniflux
+      SPRING_R2DBC_PASSWORD: ${OMNIFLUX_DB_PASSWORD:?OMNIFLUX_DB_PASSWORD missing — set it (see .env.example)}
+      # Flyway is JDBC and STARTUP-ONLY, and it needs its own URL: application.yml
+      # defaults it to localhost:5435, which is the HOST mapping. From inside this
+      # container that address is this container, and migration fails at boot.
+      SPRING_FLYWAY_URL: jdbc:postgresql://postgres:5432/omniflux
+      SPRING_FLYWAY_USER: omniflux
+      SPRING_FLYWAY_PASSWORD: ${OMNIFLUX_DB_PASSWORD:?OMNIFLUX_DB_PASSWORD missing — set it (see .env.example)}
+      OMNIFLUX_STORAGE_ENDPOINT: http://seaweedfs:8333
+      OMNIFLUX_STORAGE_PUBLIC_ENDPOINT: ${OMNIFLUX_STORAGE_PUBLIC_ENDPOINT:-http://localhost:9005}
+      OMNIFLUX_STORAGE_BUCKET: omniflux
+      OMNIFLUX_STORAGE_ACCESS_KEY: ${OMNIFLUX_S3_ACCESS_KEY:?OMNIFLUX_S3_ACCESS_KEY missing — see .env.example}
+      OMNIFLUX_STORAGE_SECRET_KEY: ${OMNIFLUX_S3_SECRET_KEY:?OMNIFLUX_S3_SECRET_KEY missing — see .env.example}
+      # Select the source adapter used by the export worker. Keep REST as the
+      # default for the local stack; set this to r2dbc for the direct database
+      # proof path, or run separate app instances when comparing both paths.
+      OMNIFLUX_SOURCE_DEFAULT_ADAPTER: ${OMNIFLUX_SOURCE_DEFAULT_ADAPTER:-rest}
+      OMNIFLUX_SOURCE_REST_BASE_URL: http://postgrest:3000
+      # The bearer token PostgREST accepts; MUST be signed with
+      # OMNIFLUX_PGRST_JWT_SECRET (.env.example shows how to generate a pair).
+      DATA_API_TOKEN: ${OMNIFLUX_DATA_API_TOKEN:?OMNIFLUX_DATA_API_TOKEN missing — set it (see .env.example)}
+      # The demo profile explicitly opts into unauthenticated development mode.
+      # StartupValidator checks that opt-in, not whether storage is local.
+      OMNIFLUX_SECURITY_AUTH_MODE: DISABLED
+      SPRING_PROFILES_ACTIVE: demo
+      JAVA_TOOL_OPTIONS: >-
+        -Xmx320m
+        -XX:MaxDirectMemorySize=64m
+        -XX:+ExitOnOutOfMemoryError
+        -XX:NativeMemoryTracking=summary
+    ports:
+      - "${OMNIFLUX_APP_PORT:-8080}:8080"
+    networks:
+      - omniflux-network
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:8080/actuator/health >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+networks:
+  omniflux-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  seaweedfs_data:

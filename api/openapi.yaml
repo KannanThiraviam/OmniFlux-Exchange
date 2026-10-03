@@ -1,0 +1,241 @@
+openapi: 3.1.0
+info:
+  title: OmniFlux Exchange API
+  version: 0.1.0
+  description: >-
+    Asynchronous, owner-scoped data export and read-only browse API. Problem
+    responses use RFC 9457 fields and retain `code` and `message` extensions.
+servers:
+  - url: http://localhost:8080
+tags:
+  - name: Exports
+  - name: Jobs
+  - name: Data
+  - name: Metadata
+  - name: Demo
+  - name: Operations
+paths:
+  /api/exports:
+    post:
+      tags: [Exports]
+      summary: Submit an export
+      description: Returns 202 for a queued export or 200 for a cache hit.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema: { type: string, maxLength: 200 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ExportRequest' }
+      responses:
+        '200': { description: Cache hit; completed job view returned }
+        '202': { description: Export accepted; job view returned }
+        '400': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '429': { $ref: '#/components/responses/Problem' }
+  /api/jobs:
+    get:
+      tags: [Jobs]
+      summary: List caller-owned jobs
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, default: 50 } }
+        - { name: after, in: query, schema: { type: string } }
+      responses:
+        '200': { description: Cursor-paginated job page }
+        '400': { $ref: '#/components/responses/Problem' }
+  /api/jobs/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Jobs]
+      summary: Read a caller-owned job
+      responses:
+        '200': { description: Job state and output metadata }
+        '404': { $ref: '#/components/responses/Problem' }
+  /api/jobs/{id}/timing:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Jobs]
+      summary: Read persisted export timings
+      responses:
+        '200': { description: Export phase timing snapshot }
+        '404': { $ref: '#/components/responses/Problem' }
+  /api/jobs/{id}/attempts:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Jobs]
+      summary: Read durable attempt history
+      responses:
+        '200': { description: Job attempt history }
+        '404': { $ref: '#/components/responses/Problem' }
+  /api/jobs/{id}/download:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Jobs]
+      summary: Create a short-lived download URL
+      responses:
+        '200': { description: Presigned download URL and metadata }
+        '404': { $ref: '#/components/responses/Problem' }
+  /api/jobs/{id}/download-url:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Jobs]
+      summary: Alias for the download URL route
+      responses:
+        '200': { description: Presigned download URL and metadata }
+        '404': { $ref: '#/components/responses/Problem' }
+  /api/jobs/{id}/retry:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [Jobs]
+      summary: Retry an eligible failed or cancelled job
+      responses:
+        '200': { description: Requeued job view }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+  /api/jobs/{id}/cancel:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [Jobs]
+      summary: Cancel a queued or running job
+      responses:
+        '200': { description: Updated job view }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+  /api/data/{relation}:
+    parameters:
+      - { name: relation, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Data]
+      summary: Browse a relation using keyset pagination
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, default: 50 } }
+        - { name: after, in: query, schema: { type: string } }
+        - { name: filters, in: query, schema: { type: string, description: URL-encoded JSON filter array } }
+      responses:
+        '200': { description: Rows and next cursor }
+        '400': { $ref: '#/components/responses/Problem' }
+  /api/data/{relation}/count:
+    parameters:
+      - { name: relation, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Data]
+      summary: Count matching rows
+      parameters:
+        - { name: filters, in: query, schema: { type: string, description: URL-encoded JSON filter array } }
+      responses:
+        '200': { description: Exact count }
+        '400': { $ref: '#/components/responses/Problem' }
+  /api/meta/relations:
+    get:
+      tags: [Metadata]
+      summary: List allowlisted relations
+      responses:
+        '200': { description: Relation metadata }
+  /api/meta/relations/{relation}/columns:
+    parameters:
+      - { name: relation, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Metadata]
+      summary: Describe relation columns and key contract
+      responses:
+        '200': { description: Column metadata }
+        '404': { $ref: '#/components/responses/Problem' }
+  /api/data/seed:
+    post:
+      tags: [Demo]
+      summary: Add demo fixture rows
+      description: Available only with the demo profile.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [relation, rows]
+              properties:
+                relation: { type: string }
+                rows: { type: integer, minimum: 0 }
+      responses:
+        '200': { description: Seed result }
+        '400': { $ref: '#/components/responses/Problem' }
+  /api/exports/naive:
+    post:
+      tags: [Demo]
+      summary: Run deliberate in-memory export counterexample
+      description: Available only with the demo profile; materializes rows in memory.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rows]
+              properties:
+                rows: { type: integer, minimum: 0, maximum: 2000000 }
+      responses:
+        '200': { description: Materialization estimate }
+        '400': { $ref: '#/components/responses/Problem' }
+  /api/system/resources:
+    get:
+      tags: [Operations]
+      summary: Read in-memory resource and effective-config snapshot
+      responses:
+        '200': { description: Resource and sanitized configuration snapshot }
+  /actuator/health:
+    get:
+      tags: [Operations]
+      summary: Read service health
+      responses:
+        '200': { description: Health status }
+  /actuator/prometheus:
+    get:
+      tags: [Operations]
+      summary: Scrape Prometheus metrics
+      responses:
+        '200': { description: Prometheus text exposition }
+components:
+  schemas:
+    ExportRequest:
+      type: object
+      required: [relation]
+      properties:
+        relation: { type: string }
+        columns: { type: array, items: { type: string } }
+        filters: { type: array, items: { $ref: '#/components/schemas/Filter' } }
+        format: { type: string, enum: [CSV, XLSX] }
+        csvMode: { type: string, enum: [SPREADSHEET_SAFE, RAW] }
+    Filter:
+      type: object
+      required: [column, operator, value]
+      properties:
+        column: { type: string }
+        operator: { type: string, enum: [EQ, NE, GT, GTE, LT, LTE, IN] }
+        value: {}
+    ProblemDetail:
+      type: object
+      description: RFC 9457 problem with stable application extensions.
+      required: [type, title, status, detail, code, message]
+      properties:
+        type: { type: string, format: uri-reference }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string, format: uri-reference }
+        code: { type: string }
+        message: { type: string }
+  responses:
+    Problem:
+      description: Request or processing error
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetail' }

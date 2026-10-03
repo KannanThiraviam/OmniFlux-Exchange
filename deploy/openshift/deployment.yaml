@@ -1,0 +1,120 @@
+# v1 uses HEADER mode behind the restricted API gateway. The gateway must
+# authenticate callers, strip inbound X-Auth-* headers, and add the trusted
+# identity headers expected by HeaderPrincipalProvider. NetworkPolicy limits
+# ingress to that gateway namespace.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: omniflux-exchange
+  labels:
+    app: omniflux-exchange
+  annotations:
+    omniflux.io/runnable: "true"
+spec:
+  replicas: 3
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: omniflux-exchange
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: omniflux-exchange
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /actuator/prometheus
+        prometheus.io/port: "8080"
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: omniflux-exchange
+          # Placeholder coordinates — replaced by the cluster's build/deploy
+          # pipeline, never edited by hand. The tag is pinned (never :latest)
+          # so an unpinned image can never reach the cluster by accident.
+          image: image-registry.openshift-image-registry.svc:5000/omniflux/omniflux-exchange:0.1.0
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: omniflux-exchange-config
+            - secretRef:
+                name: omniflux-exchange-secrets
+          env:
+            # The numbers below are the ones StartupValidator's arithmetic
+            # depends on: -Xmx320m + a 96Mi non-heap reserve = 416Mi, under the
+            # 512Mi container limit. Changing one without the others is exactly
+            # the mistake the validator exists to catch at boot, not at 3 a.m.
+            - name: JAVA_TOOL_OPTIONS
+              value: >-
+                -Xmx320m
+                -XX:MaxDirectMemorySize=64m
+                -XX:+ExitOnOutOfMemoryError
+          resources:
+            # Requests == limits on every resource, including cpu: Guaranteed
+            # QoS. Memory equality alone still leaves Burstable QoS if cpu
+            # requests are absent or zero, which makes this pod an eviction
+            # candidate under node pressure — the exact failure this design
+            # exists to avoid, arriving by a different door.
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+              ephemeral-storage: "64Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+              ephemeral-storage: "64Mi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+            capabilities:
+              drop:
+                - ALL
+          # Liveness is generous (must outlast a 60s queue lease, or a merely
+          # BUSY pod restarts itself mid-export and orphans a multipart
+          # upload). Readiness is strict: pull this pod out of rotation the
+          # moment it stops answering, well before liveness would ever fire.
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            # The zero-disk guarantee, enforced rather than measured: a
+            # read-only root filesystem plus a deliberately tiny tmpfs. Any
+            # library that tries to spool to disk fails loudly instead of
+            # quietly consuming ephemeral storage until the kubelet evicts
+            # the pod.
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 16Mi

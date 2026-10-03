@@ -1,0 +1,22 @@
+# application-demo.yml — local only. Production manifests never set this.
+omniflux:
+  security:
+    allow-non-jwt-auth: true
+    allowed-relations: [mock_customers, mock_orders, mock_wide]
+    # PostgREST's generated OpenAPI document does not carry primary-key
+    # extensions. These hints are equivalent to the database PKs in init-db
+    # and let the local REST adapter exercise the real keyset path.
+    view-keys:
+      mock_customers: id
+      mock_orders: id
+      mock_wide: id
+  observability:
+    # The container's writable surface is the deliberately small /tmp tmpfs.
+    # AUTO also sees Docker's writable proc mount and recursively walks paths
+    # the non-root runtime cannot read.
+    watch-paths: [/tmp]
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true

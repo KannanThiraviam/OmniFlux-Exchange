@@ -1,0 +1,55 @@
+:root {
+  --md-primary-fg-color: #087da8;
+  --md-accent-fg-color: #06789f;
+  --md-default-fg-color: #23364a;
+  --md-default-fg-color--light: #53667b;
+  --md-default-bg-color: #fcfdff;
+  --md-text-font: "Segoe UI", "Helvetica Neue", sans-serif;
+  --md-code-font: "Cascadia Code", Consolas, monospace;
+}
+.md-header {
+  color: #20354b;
+  background: #fcfdff;
+  box-shadow: none;
+  border-bottom: 1px solid #dde6ef;
+}
+.md-header__title { font-weight: 650; letter-spacing: -.015em; }
+.md-search__form { background: #eef3f8; border: 1px solid #d8e3ed; border-radius: 5px; }
+.md-search__input, .md-search__icon { color: #324b63; }
+.md-search__input::placeholder { color: #53667b; }
+.md-search__icon svg { fill: #324b63; }
+.md-grid { max-width: 76rem; }
+.md-sidebar--primary { border-right: 1px solid #e1e8ef; }
+.md-nav { font-size: .72rem; line-height: 1.5; }
+.md-nav__item--section > .md-nav__link { color: #23364a; font-weight: 700; }
+.md-nav__link { padding: .12rem 0; }
+.md-nav__link--active { color: #06789f; font-weight: 650; }
+.md-content { max-width: 49rem; }
+.md-content__inner { padding: 0 1.5rem 2rem; }
+.md-typeset { font-size: .85rem; line-height: 1.65; }
+.md-typeset h1 { color: #17324d; font-weight: 700; letter-spacing: -.035em; margin-bottom: 1rem; }
+.md-typeset h2 { color: #17324d; font-weight: 650; letter-spacing: -.02em; margin-top: 2.1rem; }
+.md-typeset h3 { color: #17324d; font-weight: 650; }
+.md-typeset a { text-underline-offset: .18em; }
+.md-typeset a:hover { text-decoration: underline; }
+.md-typeset table:not([class]) { font-size: .75rem; border: 1px solid #dde6ef; border-radius: 4px; }
+.md-typeset table:not([class]) th { color: #17324d; background: #eef4f9; min-width: 0; }
+.md-typeset table:not([class]) td { padding: .7em .9em; }
+.md-typeset code { border-radius: 3px; background: #eef3f8; }
+.md-typeset .diagram { display: block; width: 100%; margin: 1.25rem 0; padding: 1rem; border: 1px solid #dde6ef; background: #fff; border-radius: 5px; }
+.md-typeset .diagram img { display: block; width: 100%; height: auto; max-width: 100%; margin: 0 auto; }
+.md-typeset .diagram figcaption { margin: .5rem 0 0; font-size: .66rem; color: #53667b; text-align: center; }
+.md-typeset .diagram-source { font-size: .7rem; }
+.md-footer { background: #edf3f8; color: #23364a; }
+.md-footer-meta { background: #e5edf5; }
+.md-copyright, .md-copyright__highlight { color: #455f78; }
+@media (max-width: 76.1875em) {
+  .md-sidebar--primary { background: #fcfdff; }
+  .md-nav--primary .md-nav__title { color: #23364a; background: #f2f6fa; }
+}
+@media (max-width: 44.9375em) {
+  .md-content__inner { padding: 0 .35rem 1.5rem; }
+  .md-typeset h1 { font-size: 1.7rem; }
+  .md-typeset .diagram { padding: .5rem; }
+  .md-typeset table:not([class]) { font-size: .72rem; }
+}

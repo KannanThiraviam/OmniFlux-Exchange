@@ -1,0 +1,21 @@
+# ClusterIP only. A NodePort or LoadBalancer Service publishes this pod
+# directly, exactly as effectively as a Route would — see
+# thereIsNoRouteUntilTheGatewayDecisionIsMade in OpenShiftManifestTest and the
+# header comment in deployment.yaml. The Data API / gateway is the only
+# exposed entry point (design spec §2.1); this Service exists only for the
+# gateway to reach the pod inside the cluster network.
+apiVersion: v1
+kind: Service
+metadata:
+  name: omniflux-exchange
+  labels:
+    app: omniflux-exchange
+spec:
+  type: ClusterIP
+  selector:
+    app: omniflux-exchange
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
