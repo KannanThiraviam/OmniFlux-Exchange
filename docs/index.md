@@ -8,6 +8,8 @@ OmniFlux Exchange is a Java 25 / Spring Boot service for exporting allowlisted d
 
 | I want to... | Read |
 |---|---|
+| See the technologies and tools | [Technology and tools](TECH_STACK.md) |
+| Inspect backend data and files | [Local data and storage](LOCAL_DATA.md) |
 | Learn the terminology | [Key concepts](concepts.md) |
 | Run an export locally | [Getting started](GETTING_STARTED.md) |
 | Understand the problem and solution | [Overview](architecture/overview.md) |
@@ -15,6 +17,15 @@ OmniFlux Exchange is a Java 25 / Spring Boot service for exporting allowlisted d
 | Follow the execution and failure paths | [Low-level design](architecture/low-level-design.md) |
 | Call the service | [API reference](API.md) |
 | Deploy and troubleshoot | [Operations](OPERATIONS.md) |
+
+## First-time user path
+
+1. **[Getting started](GETTING_STARTED.md)**: install the required tools, clone, start, and confirm the ready message.
+2. **[Dashboard walkthrough](GETTING_STARTED.md#3-open-the-application)**: preview three customers, submit CSV/XLSX, and download the completed result.
+3. **[Local data and storage](LOCAL_DATA.md)**: open endpoints, view backend JSON, query PostgreSQL, and inspect storage.
+4. **[Technology and tools](TECH_STACK.md)**: understand Spring Boot, PostgreSQL, Flyway, Docker, and verification tools.
+
+The documentation site is hosted on GitHub Pages. The runnable app is a separate local stack; `localhost` links work after you start it on your computer.
 
 ## Architecture reading path
 

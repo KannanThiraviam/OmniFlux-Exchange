@@ -64,6 +64,8 @@ The writer can wait for upload demand. It must run on the dedicated executor so 
 
 ## Durable state
 
+Durable state survives an application restart because it is stored outside the worker process. In the local stack, database and object-storage volumes retain it across ordinary container stops.
+
 | Store | Contents |
 |---|---|
 | `transfer_jobs` | Current request, identity snapshot, state, claim, result metadata, diagnostics |
@@ -74,6 +76,8 @@ The writer can wait for upload demand. It must run on the dedicated executor so 
 Presigned URLs are minted on demand and are not persisted. The [data model](../data-model.md) covers schema and migrations.
 
 ## Deployment topology
+
+Topology is how the deployed components are connected. The diagram below is the production template; local Compose provides a single-machine development stack.
 
 ```mermaid
 flowchart TB

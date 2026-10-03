@@ -4,7 +4,7 @@ Thanks for improving OmniFlux Exchange. Check the current implementation and doc
 
 ## Local setup
 
-1. Install Docker Compose and PowerShell 7 on Windows, then start the stack with `pwsh -File scripts/up.ps1 -Build` (or use the direct Compose instructions in [Getting started](docs/GETTING_STARTED.md)).
+1. Follow [Getting started](docs/GETTING_STARTED.md) for requirements and the full local walkthrough; use [Technology and tools](docs/TECH_STACK.md) for the stack and [Local data and storage](docs/LOCAL_DATA.md) for inspection.
 2. For host-side Java work, use the checked-in wrapper and JDK 25: `./mvnw -B verify` or `./mvnw.cmd -B verify`.
 3. Read [quality gates](docs/QUALITY_GATES.md) for hook installation, CI, and repository checks. Run relevant gates before requesting review.
 

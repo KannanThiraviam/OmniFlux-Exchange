@@ -4,6 +4,11 @@ Project changes before the first release are summarized here. This file is a hum
 
 ## Unreleased
 
+- Reviewed maintained guides for first-time users. Added a complete Docker/dashboard walkthrough, a bounded three-row API export with a polling deadline and saved download, explicit local endpoint/data inspection steps, and a technology/tool reference.
+- Explained Flyway, migration history, the local V1 baseline, and psql shortcuts. Corrected seed target-count semantics, Unix executable-permission setup, stale storage credential aliases, and overstatements about lease safety and memory guarantees.
+
+- Clarified psql inspection shortcuts and documented the exact SeaweedFS diagnostics, health, and S3 endpoints with configurable port mappings.
+
 - Added a beginner concepts guide, explained lease/fencing with a worked example, and removed heading permalink symbols.
 
 - Replaced special punctuation and outdated numeric section labels in maintained documentation with plain text and descriptive links.

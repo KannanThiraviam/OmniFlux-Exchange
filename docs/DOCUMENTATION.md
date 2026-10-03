@@ -12,7 +12,7 @@ The site uses system fonts: Segoe UI on Windows, Helvetica Neue where installed,
 
 ## Preview locally
 
-Install the small documentation dependency set in a checkout-local environment:
+To maintain this site, use Python 3.12 or later and `uv` (a Python package/environment manager). Install the small documentation dependency set in a checkout-local environment:
 
 ```powershell
 $env:UV_CACHE_DIR = "$PWD/.tmp_logs/uv-cache"
@@ -34,7 +34,7 @@ On Unix, use `.tmp_logs/docs-venv/bin/python` and `.tmp_logs/docs-venv/bin/mkdoc
 
 ## Writing conventions
 
-Use plain ASCII punctuation and descriptive link labels in maintained guides. Prefer named sections to numeric references, which become stale when the reading order changes. Define unfamiliar terms at first use and use examples for ownership and recovery behavior. The Key concepts page is the beginner reference. Heading permalink markers are disabled; heading IDs and table-of-contents links still work. Keep historical evidence unchanged.
+Use plain ASCII punctuation and descriptive link labels in maintained guides. Prefer named sections to numeric references, which become stale when the reading order changes. Define unfamiliar terms at first use and use examples for ownership and recovery behavior. The Key concepts page is the beginner reference. Heading permalink markers are disabled; heading IDs and table-of-contents links still work. If an already-open browser tab still shows the old markers after deployment, reload it with Ctrl+F5 on Windows/Linux or a cache-bypassing reload on macOS. Keep historical evidence unchanged.
 
 ## Edit diagrams
 

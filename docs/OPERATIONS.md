@@ -12,6 +12,14 @@ This runbook covers the current local Compose stack and the operational checks e
 
 Distributed tracing is not configured. Production console logs use ECS structured JSON; avoid logging request bodies, credentials, or presigned URLs. Use the API snapshot for process/resource details and Prometheus for time-series metrics.
 
+## Local storage diagnostics
+
+For the default Compose ports, open the [SeaweedFS master diagnostics page](http://localhost:9006) or check [master health](http://localhost:9006/cluster/healthz). The master provides storage status; S3 object access uses a separate endpoint, `http://localhost:9005`. See [Local data and storage](LOCAL_DATA.md#open-seaweedfs-diagnostics) for browser steps, port overrides, database queries, and S3 client settings.
+
+## Database migration diagnostics
+
+Flyway applies pending schema migrations during application startup. If startup fails with a migration or checksum error, inspect `docker compose logs --tail 100 app`, compare the deployed migration files with the recorded history, and resolve the mismatch through a reviewed forward change. Do not delete history rows or rewrite applied migrations. See [Flyway and startup migrations](data-model.md#flyway-and-startup-migrations) for the history query and the local V1 baseline.
+
 ## Metrics and suggested alerts
 
 | Metric (Prometheus name) | Type | Meaning |
@@ -21,7 +29,7 @@ Distributed tracing is not configured. Production console logs use ECS structure
 | `omniflux_jobs_active` | gauge | Active jobs visible to this database |
 | `omniflux_jobs_worker_active` | gauge | Jobs executing on this pod |
 | `omniflux_jobs_claimed_total` | counter | Jobs this pod has claimed |
-| `omniflux_jobs_finished_total{outcome}` | counter | Finished attempts by outcome: `completed`, `failed`, `lease_lost`, `cancelled` |
+| `omniflux_jobs_finished_total{outcome}` | counter | Finished attempts by emitted outcome: `completed`, `failed`, `lease_lost`; running cancellation currently also reports `lease_lost` |
 | `omniflux_jobs_execution_seconds{outcome}` | histogram | Attempt duration |
 | `omniflux_jobs_rows_per_second` | gauge | Five-minute completed-row throughput |
 | `omniflux_jobs_cache_hit_rate` | gauge | Five-minute cache-hit ratio |
@@ -39,7 +47,7 @@ Suggested starting alerts (tune the thresholds to your workload):
   `rate(omniflux_jobs_finished_total{outcome="lease_lost"}[15m])`, which points
   at database latency or pod CPU throttling.
 - **Pod memory:** container working set near the 512 MiB limit, or any OOM
-  kill. The design should make both impossible, so treat either as a bug.
+  kill. Investigate buffer limits, concurrency, JVM overhead, and workload assumptions; the configured memory estimate is not a guarantee for every workload.
 
 ## Stuck queued jobs or gate mismatch
 
@@ -59,7 +67,7 @@ Symptoms: jobs remain `QUEUED`, workers are not claiming work, or the poller rep
 
 ## Expired leases and retries
 
-Workers renew leases independently. Expired `IN_PROGRESS` work is handled by the lease sweeper and requeued while attempts remain; after the configured maximum, the job becomes terminal. Inspect job detail and attempt history before retrying. A manual retry restarts the export from the beginning. Fencing tokens ensure an old worker cannot publish a stale completion after losing ownership.
+Workers renew leases independently. Expired `IN_PROGRESS` work is handled by the lease sweeper and requeued while attempts remain; after the configured maximum, the job becomes terminal. Inspect job detail and attempt history before retrying. A manual retry restarts the export from the beginning. A replaced token rejects old worker database updates. Lease-expiry publication and shutdown object-key reuse remain open gaps; see [Implementation status](IMPLEMENTATION_STATUS.md#known-correctness-gaps).
 
 Repeated `LEASE_LOST` errors may indicate database latency, overloaded workers, clock/lease configuration problems, or shutdowns exceeding the drain window. Compare attempt timestamps, replica logs, and configured lease-renew interval/deadline.
 

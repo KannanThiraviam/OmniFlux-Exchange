@@ -6,6 +6,8 @@ Start with the [documentation home](index.md) for the reading path, or browse th
 
 | Document | What it answers |
 |---|---|
+| [Technology and tools](TECH_STACK.md) | What the technologies do, including Flyway and migrations |
+| [Local data and storage](LOCAL_DATA.md) | How to open endpoints, inspect backend data, and connect a database client |
 | [Key concepts](concepts.md) | Plain-language definitions for new readers |
 | [Overview](architecture/overview.md) | What problem this solves, the benefits, C4-style diagrams, the export lifecycle, and the questions people ask (files vs object storage, SeaweedFS vs MinIO, why not Kafka) |
 | [Principles and patterns](architecture/principles-and-patterns.md) | First principles and named patterns (cloud, distributed, GoF, hexagonal, SOLID), each mapped to the classes that implement it |

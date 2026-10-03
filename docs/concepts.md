@@ -4,6 +4,8 @@ Start here if you are new to background jobs, streaming exports, or object stora
 
 ## Requests and identity
 
+**Endpoint:** A URL for a service operation. A browser address-bar request uses GET to read it. Use Swagger or another HTTP client when an operation requires POST.
+
 **API:** The HTTP interface used to submit an export, check its status, and request a download. A `202 Accepted` response means the job was accepted; the export is still running or waiting.
 
 **Principal:** The caller's identity, including its issuer, subject, and tenant context. Job actions are scoped to this identity so one caller cannot read another caller's job.
@@ -11,6 +13,14 @@ Start here if you are new to background jobs, streaming exports, or object stora
 **Allowlist:** The explicitly approved relations and columns that callers may access. A relation is a database table or view. Data outside the configured catalog is rejected.
 
 **Idempotency key:** A client-supplied identifier for a submission. Repeating the same request with the same identity and key returns the existing job. Changing the request under that key produces a conflict.
+
+## Database and schema changes
+
+**Schema:** The definition of database tables, columns, indexes, and constraints. In PostgreSQL, `public` is also a named namespace grouping tables.
+
+**Flyway and migration:** Flyway updates the schema during application startup using versioned SQL files. A migration is one recorded schema change. Flyway stores its history in `flyway_schema_history`. See [Technology and tools](TECH_STACK.md#flyway-explained) and [Data model](data-model.md#flyway-and-startup-migrations).
+
+**psql:** PostgreSQL's interactive command-line client. Backslash commands such as `\dt` are client shortcuts; SQL statements such as `SELECT` query the database. See [inspection steps](LOCAL_DATA.md#inspect-postgresql-with-psql).
 
 ## Background work and ownership
 

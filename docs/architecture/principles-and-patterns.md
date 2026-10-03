@@ -50,6 +50,9 @@ the named patterns a reviewer will recognise. The tables name the implementing c
 
 ## 4. Object-oriented (GoF) patterns
 
+GoF means the classic "Gang of Four" design-pattern catalog. The Strategy pattern selects an implementation through a common interface; Factory centralizes object creation; Adapter connects an external system to a project interface; Decorator adds behavior around an existing object; Builder constructs an object step by step. The table maps those ideas to this project's classes.
+
+
 | Pattern | Where |
 |---|---|
 | **Strategy** | `RowWriter` (`CsvRowWriter`, `XlsxStreamWriter`); `CurrentUserProvider` (`FixedPrincipalProvider`, `HeaderPrincipalProvider`); `DataApiCredentials` (`StaticDataApiCredentials`, `ClientCredentialsDataApiCredentials`); `CsvDialect` modes |
@@ -101,6 +104,6 @@ store means adding an adapter. The pipeline, queue, and API stay as they are.
 |---|---|---|---|
 | PostgreSQL queue | Kafka or RabbitMQ | Gate, ownership, history, and fencing share one transaction | Row-lock throughput ceiling (ample at export rates) |
 | Hand-written OOXML | Apache POI | POI spools to disk | We maintain an XLSX writer (one sheet, inline strings) |
-| Integer keyset paging | Arbitrary sort keys | Termination and O(1) pages | Relations need an integer unique key |
+| Integer keyset paging | Arbitrary sort keys | Bounded page size and a fixed upper key | Relations need an integer unique key |
 | Gateway identity (`HEADER`) | Native JWT in v1 | Reuses the platform's auth | Security depends on network isolation until JWT lands |
 | Restart a failed attempt from row 1 | Resume mid-file | S3 multipart parts cannot be safely resumed across owners | Long exports redo work after a crash |

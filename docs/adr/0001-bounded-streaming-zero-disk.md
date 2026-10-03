@@ -21,10 +21,10 @@ to end:
   hand-written streaming OOXML with inline strings.
 - A demand-gated `outputStreamPublisher` bridge blocks the writer when the
   uploader has no demand.
-- The uploader holds one multipart part (8 MiB) at a time.
+- The uploader uses bounded buffers and sends 8 MiB parts by default.
 
-The container runs with a read-only root filesystem and a 16 MiB tmpfs, so any
-accidental spooling fails immediately. `StartupValidator` checks the memory
+The container runs with a read-only root filesystem and a 16 MiB tmpfs, to constrain
+accidental spooling. `StartupValidator` checks the memory
 arithmetic (`max-concurrent * per-job budget + baseline <= heap`, heap plus
 non-heap reserve <= cgroup limit) at boot.
 

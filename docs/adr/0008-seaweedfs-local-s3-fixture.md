@@ -16,8 +16,9 @@ an unpinned `minio/minio:latest`.
 Compose and the integration tests run `chrislusf/seaweedfs:4.44` in `mini`
 mode, pinned by digest. An `amazon/aws-cli` one-shot creates the bucket and
 installs lifecycle rules (7-day expiry and incomplete multipart abort for
-`exports/`). The older `OMNIFLUX_MINIO_*` variable names are still accepted as
-aliases for `OMNIFLUX_S3_*`.
+`exports/`). Compose requires `OMNIFLUX_S3_ACCESS_KEY` and
+`OMNIFLUX_S3_SECRET_KEY`; its S3 host-port mapping still accepts the old
+`OMNIFLUX_MINIO_PORT` fallback.
 
 ## Consequences
 
@@ -27,7 +28,7 @@ aliases for `OMNIFLUX_S3_*`.
   MinIO rejected (see `docs/evidence/spike-results.md`), so the local stack is
   now closer to production behaviour. `StartupReconciler` remains the
   application-side safety net.
-- Historical documents (spec, plans, reviews, evidence) still say MinIO; they
-  describe the system at the time they were written.
+- Historical proof evidence still says MinIO and describes the earlier
+  experiment; agent spec/plan/review working files are kept local.
 - Switching back to MinIO, or to another S3 implementation, is a compose and
   Testcontainers change only.

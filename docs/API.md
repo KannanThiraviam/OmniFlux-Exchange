@@ -20,13 +20,21 @@ The default local `demo` profile uses a fixed development principal. Outside tha
 | `POST /api/jobs/{id}/retry` | Requeue an eligible failed/cancelled job | `200` job view |
 | `POST /api/jobs/{id}/cancel` | Cancel a queued or in-progress job | `200` job view |
 
+## Try the API locally
+
+Start the stack with [Getting started](GETTING_STARTED.md), then open [Swagger UI](http://localhost:8080/swagger-ui.html) in a browser. Expand `POST /api/exports`, click **Try it out**, paste the example below, and click **Execute**. The response gives a job ID. Read `GET /api/jobs/{id}` until its `status` is `COMPLETED`, then call `GET /api/jobs/{id}/download` and open the returned `url` to download the file.
+
+Typing a URL into the browser address bar sends a GET request. Use Swagger or a command-line client for POST requests. The [PowerShell example](GETTING_STARTED.md#optional-submit-through-powershell) performs submission, polling, and download.
+
+The example assumes setup populated the sample customers. It is bounded to IDs at most 3 so an existing large fixture does not turn the first API request into a full-table export.
+
 Example submission:
 
 ```json
 {
   "relation": "mock_customers",
   "columns": ["id", "full_name", "email_address"],
-  "filters": [{"column": "id", "operator": "GTE", "value": 1}],
+  "filters": [{"column": "id", "operator": "LTE", "value": 3}],
   "format": "CSV",
   "csvMode": "SPREADSHEET_SAFE"
 }
@@ -53,11 +61,13 @@ These routes are profile/operator endpoints, not a general consumer API:
 
 | Method and path | Availability | Purpose |
 |---|---|---|
-| `POST /api/data/seed` | `demo` profile | Add fixture rows: `{ "relation": "mock_customers", "rows": 3 }` |
+| `POST /api/data/seed` | `demo` profile | Grow a fixture to a target total: `{ "relation": "mock_customers", "rows": 3 }`. Existing larger tables are not shrunk. |
 | `POST /api/exports/naive` | `demo` profile | Deliberate materialization counterexample; not an export path |
 | `GET /api/system/resources` | Application | In-memory resource, filesystem-event, job-count, throughput, and config snapshot |
 | `GET /actuator/health` | Actuator | Health status plus readiness/liveness probes |
 | `GET /actuator/prometheus` | Actuator | Prometheus scrape endpoint |
+
+The seed response reports the requested target, not the number inserted. See [sample data](LOCAL_DATA.md#add-more-sample-rows).
 
 ## Errors
 

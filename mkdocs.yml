@@ -57,8 +57,10 @@ validation:
 nav:
   - Documentation: index.md
   - Get started:
-      - Key concepts: concepts.md
       - Local setup: GETTING_STARTED.md
+      - Local data and storage: LOCAL_DATA.md
+      - Technology and tools: TECH_STACK.md
+      - Key concepts: concepts.md
       - API reference: API.md
   - Architecture:
       - Overview: architecture/overview.md

@@ -41,7 +41,9 @@ Demo migration isolation remains open as described above. These gaps should be r
 
 ## Verification notes
 
-Last full verification (2026-10-03, Windows 11, Docker Engine 29.8, JDK 25):
+These are recorded runs; a documentation-only review does not rerun the Java suite or the clean-room setup. Current GitHub workflow results appear under [Actions](https://github.com/KannanThiraviam/OmniFlux-Exchange/actions).
+
+Recorded full verification (2026-10-03, Windows 11, Docker Engine 29.8, JDK 25):
 
 - `mvnw -B clean verify`: 269 tests, 0 failures, 2 skipped; Checkstyle and
   the JaCoCo core-coverage gate passed. Integration tests use Testcontainers,
