@@ -4,6 +4,8 @@ Project changes before the first release are summarized here. This file is a hum
 
 ## Unreleased
 
+- Corrected YAML quoting for the hashed documentation dependency install command so the GitHub Pages workflow can start. Validated both workflow files with the documentation environment's YAML parser.
+
 - Added a controlled baseline-versus-latest export benchmark and evidence report: 80 samples, 128 verified jobs, matching limits and fixtures, with measured R2DBC CSV time increases of about 9% and REST median changes of about 1%. Documented the owner's publication exception for the five deferred Snyk Code findings; normal hooks remain blocking.
 
 - Restricted dashboard downloads to the configured public storage origin and configured virtual-hosted bucket, with regression checks in both hooks. Corrected the Snyk Code review guidance: gateway-supplied identity headers do not establish CSRF protection when the gateway authenticates browser cookies or sessions. Remaining findings stay blocking pending implementation or a scoped review.
