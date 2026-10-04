@@ -37,6 +37,6 @@ A **lease** is a worker's permission to run a job until a recorded deadline; ren
 - The termination grace period must exceed the drain timeout (60 s vs 30 s by
   default).
 
-## Implementation gaps
+## Publication and storage identity
 
-The accepted mechanism is only partially enforced at two boundaries: completion does not explicitly require an unexpired lease, and shutdown can reuse an object key after requeue. See [Implementation status](../IMPLEMENTATION_STATUS.md#known-correctness-gaps) before treating fencing as a complete storage-publication guarantee.
+Completion requires a matching token, `IN_PROGRESS` status, no cancellation request, and an unexpired lease measured by the database clock at the update. Each new storage key includes its immutable claim token. Shutdown cancels execution before releasing the claim and restores the retry budget; a later claim can reuse the attempt number but cannot reuse the storage key. Reconciliation recognizes both claim-specific keys and legacy attempt-only keys. See [Implementation status](../IMPLEMENTATION_STATUS.md#correctness-fixes) for regression coverage.

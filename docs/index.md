@@ -41,7 +41,7 @@ Every architecture diagram has an **Open full-size diagram** link. Use it to rea
 
 The service includes bounded streaming writers, a PostgreSQL job queue, leases and fencing, multipart upload, owner-scoped job actions, a local dashboard, and metrics.
 
-Native JWT validation and distributed tracing are deferred. [Implementation status](IMPLEMENTATION_STATUS.md) records the current scope and unresolved correctness gaps.
+Native JWT validation and distributed tracing are deferred. [Implementation status](IMPLEMENTATION_STATUS.md) records the current scope, completed correctness fixes, and remaining limitations.
 
 ## Guides and reference
 

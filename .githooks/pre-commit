@@ -1,6 +1,5 @@
 #!/bin/sh
-# Agent safety boundary + staged whitespace check. Humans commit freely;
-# agents need explicit commit approval.
+# Agent approval boundary and the full staged quality gate.
 set -eu
 
 is_agent_context() {
@@ -21,6 +20,10 @@ if is_agent_context; then
   fi
 fi
 
-# Keep the local hook fast and portable. Full Maven/Testcontainers verification
-# runs in GitHub Actions on every PR; this catches whitespace errors locally.
 git diff --cached --check
+if ! command -v pwsh >/dev/null 2>&1; then
+  echo "PowerShell 7 (pwsh) is required for the quality gate. See docs/QUALITY_GATES.md." >&2
+  exit 1
+fi
+root=$(git rev-parse --show-toplevel)
+exec pwsh -NoProfile -File "$root/scripts/quality-gate.ps1" -Staged

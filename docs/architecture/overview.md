@@ -59,7 +59,7 @@ See the [low-level design](low-level-design.md) for the sequences, state transit
 | Bound memory as row count grows | Incremental reads, fixed buffers, and demand propagation | The [1M-row XLSX proof](../evidence/runs/20260907T005853Z-xlsx-proof/manifest.json) records about 92 MiB peak heap for that workload. This is a measurement, not a guarantee for every configuration. |
 | Avoid export spooling | CSV and streaming OOXML write directly into multipart upload | The application container has a read-only root filesystem and a small `/tmp` mount. |
 | Bound shared source load | PostgreSQL serializes admission across replicas | Claims check the global active count while holding the gate row lock. |
-| Recover durable work | Job rows, leases, retries, and reconciliation | Unresolved handoff and lease-boundary concerns are listed in the [implementation status](../IMPLEMENTATION_STATUS.md#known-correctness-gaps). |
+| Recover durable work | Job rows, leases, retries, and reconciliation | Publication checks lease expiry; claim-specific storage keys protect shutdown handoff. See [implementation status](../IMPLEMENTATION_STATUS.md#correctness-fixes) for regression coverage. |
 | Keep download traffic off the service | Presigned object GET | The browser receives bytes from object storage. |
 | Restrict source access | Allowlisted metadata and supported filters | The gateway and source remain responsible for authentication and fine-grained entitlements. |
 

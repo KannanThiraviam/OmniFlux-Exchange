@@ -109,6 +109,6 @@ Prometheus scraping requires both a collector allowed by network policy and, for
 
 Memory estimates depend on configuration and measured overhead. They do not certify every workload against every JVM/container limit. The [low-level design](low-level-design.md#memory-budget) shows the configured arithmetic.
 
-## Readiness and known gaps
+## Readiness and implementation limits
 
-The implementation includes durable coordination, streaming exports, metrics, and a runnable local fixture. It remains a development baseline. The [implementation status](../IMPLEMENTATION_STATUS.md#known-correctness-gaps) records unresolved query-timeout, lease-publication, and shutdown object-key concerns. The diagrams describe the current mechanisms without treating those gaps as solved.
+The implementation includes durable coordination, streaming exports, metrics, and a runnable local fixture. It remains a development baseline. The [implementation status](../IMPLEMENTATION_STATUS.md) records the five completed correctness fixes and the remaining limitations: JWT authentication, application-managed entitlements, distributed tracing, and demo migration isolation.

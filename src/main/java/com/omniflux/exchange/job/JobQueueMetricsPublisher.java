@@ -26,7 +26,7 @@ public final class JobQueueMetricsPublisher {
     private final AtomicLong globalActive = new AtomicLong();
     private final AtomicLong rowsPerSecond = new AtomicLong();
     private final AtomicLong cacheHitRatePpm = new AtomicLong();
-    private volatile Disposable refresh;
+    private Disposable refresh;
 
     public JobQueueMetricsPublisher(JobRepository jobs, MeterRegistry registry) {
         this.jobs = jobs;

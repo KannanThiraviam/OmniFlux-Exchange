@@ -56,6 +56,9 @@ public class StartupValidator {
     @PostConstruct
     public void validate() {
         assertAuthModeImplementedAndOptedIn();
+        if (p.security().queryTimeout() == null || p.security().queryTimeout().toMillis() < 1) {
+            throw new IllegalStateException("omniflux.security.query-timeout must be at least one millisecond");
+        }
         assertXlsxProductLimit();
         assertCodecCoversTheLargestLegalRow();     // must be CALLED, not merely written
         assertHeapFits();

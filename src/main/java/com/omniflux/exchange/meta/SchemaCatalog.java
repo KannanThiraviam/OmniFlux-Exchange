@@ -24,7 +24,8 @@ import java.util.regex.Pattern;
 public final class SchemaCatalog {
 
     private static final Pattern IDENTIFIER = Pattern.compile("[A-Za-z_]\\w*");
-    private static final Set<String> SERVICE_RELATIONS = Set.of("transfer_jobs", "admission_gate");
+    private static final Set<String> SERVICE_RELATIONS = Set.of(
+            "transfer_jobs", "admission_gate", "transfer_job_attempts", "flyway_schema_history");
 
     private final Map<String, RelationMetadataProvider> providers;
     private final OmnifluxProperties properties;

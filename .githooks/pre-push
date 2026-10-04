@@ -1,7 +1,6 @@
 #!/bin/sh
-# Safety boundary only. Run the full local quality gate before pushing;
-# pre-commit checks staged whitespace and CI verifies main.
-remote_name="$1"
+# Agent approval boundary and the full quality gate for the pushed checkout.
+set -eu
 
 is_agent_context() {
   [ "${OFX_GIT_AGENT_CONTEXT:-}" = "1" ] && return 0
@@ -21,5 +20,21 @@ if is_agent_context; then
   fi
 fi
 
-# Reviewed changes are pushed directly to origin/main.
-exit 0
+# Maven tests the current checkout. Reject pushing a different revision rather
+# than reporting results for code that is not being sent to the remote.
+head=$(git rev-parse HEAD)
+zero=0000000000000000000000000000000000000000
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ "$local_sha" = "$zero" ] && continue
+  commit=$(git rev-parse "$local_sha^{commit}")
+  if [ "$commit" != "$head" ]; then
+    echo "Quality gate requires the pushed revision to match HEAD. Check out that revision and push it separately." >&2
+    exit 1
+  fi
+done
+if ! command -v pwsh >/dev/null 2>&1; then
+  echo "PowerShell 7 (pwsh) is required for the quality gate. See docs/QUALITY_GATES.md." >&2
+  exit 1
+fi
+root=$(git rev-parse --show-toplevel)
+exec pwsh -NoProfile -File "$root/scripts/quality-gate.ps1" -ForPush

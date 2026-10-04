@@ -1,7 +1,7 @@
 # Principles and patterns
 
 This page maps OmniFlux Exchange to the first principles it is built on and to
-the named patterns a reviewer will recognise. The tables name the implementing classes. Read [implementation status](../IMPLEMENTATION_STATUS.md#known-correctness-gaps) for the current limits of the lease, shutdown, and timeout mechanisms.
+the named patterns a reviewer will recognise. The tables name the implementing classes. Read [implementation status](../IMPLEMENTATION_STATUS.md#correctness-fixes) for the implemented lease, shutdown, and timeout safeguards and their regression coverage.
 
 ## 1. First principles
 
@@ -27,7 +27,7 @@ the named patterns a reviewer will recognise. The tables name the implementing c
 | **Valet Key** | `PresignService` mints a short-lived presigned URL on each download request | Storage serves the bytes; the URL grants access to exactly one object for 15 minutes. |
 | **Competing Consumers** | `JobQueuePoller` on every pod, `JobRepository.claim` with `FOR UPDATE SKIP LOCKED` | Horizontal scale without a broker. |
 | **Admission control / global limiter** | `admission_gate` singleton row locked in the same transaction as the claim | Enforces `max-concurrent` across all replicas; `max-depth` sheds load with 429. |
-| **Lease + fencing token** | `LeaseRenewer`, `claim_token` predicates in every worker transition, `ExpiredLeaseSweeper` | Fences writes after ownership changes. Lease-expiry publication and shutdown object-key gaps remain open; see Implementation status. |
+| **Lease + fencing token** | `LeaseRenewer`, `claim_token` predicates in every worker transition, `ExpiredLeaseSweeper` | Fences writes after ownership changes. Completion requires an unexpired lease; storage identity includes the immutable claim token. |
 | **Idempotent Receiver** | `Idempotency-Key` header, `JobRepository.submit` replay-or-conflict | Client retries do not create duplicate jobs. |
 | **Retry with bounded attempts** | `markFailed` requeues `TRANSIENT` errors while `attempt_count < max-attempts` | Rides out blips without endless retries; exhausted jobs end `FAILED`, never lost. |
 | **Compensating action** | Multipart abort on cancel or failure; `StartupReconciler` aborts uploads whose leases have expired | Partial work is cleaned up without distributed transactions. |
@@ -35,7 +35,7 @@ the named patterns a reviewer will recognise. The tables name the implementing c
 | **Cache-Aside with a content fingerprint** | `Fingerprint` + `ExportCacheResolver` (opt-in per relation) | An identical request for the same principal reuses a stored object and gets a fresh URL. |
 | **Gateway Offloading** | `HEADER` auth mode, `HeaderPrincipalProvider` | Authentication lives in the platform gateway; the service validates the identity contract. |
 | **Bulkhead** | Dedicated bounded `exportExecutor` for blocking writers, separate from the Netty event loop | A slow export cannot starve HTTP handling. |
-| **Graceful degradation / drain** | `JobWorker` drain on shutdown, requeue without using up an attempt | Preserves the retry budget on shutdown; object-key reuse during handoff remains an open correctness gap. |
+| **Graceful degradation / drain** | `JobWorker` drain on shutdown, requeue without using up an attempt | Cancels execution before releasing the claim and preserves the retry budget. A new claim uses a distinct storage key. |
 | **Health Endpoint Monitoring** | Actuator liveness and readiness; readiness includes the admission-gate check | The platform routes around misconfigured pods without restarting healthy ones. |
 
 ## 3. Data-access and streaming patterns

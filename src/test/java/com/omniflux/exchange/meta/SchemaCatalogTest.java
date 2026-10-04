@@ -16,6 +16,23 @@ import static org.junit.jupiter.api.Assertions.*;
 class SchemaCatalogTest {
 
     @Test
+    void allServiceTablesAreProtectedEvenWhenExplicitlyAllowlisted() {
+        for (String name : List.of("transfer_jobs", "admission_gate",
+                "transfer_job_attempts", "flyway_schema_history")) {
+            for (String relation : List.of(name, "public." + name)) {
+                var calls = new AtomicInteger();
+                var catalog = new SchemaCatalog(Map.of("r2dbc", provider(
+                        table(new ColumnDescriptor("id", LogicalType.INTEGER, false, true)), calls)),
+                        properties(relation));
+                var error = assertThrows(ExportException.class,
+                        () -> catalog.describe("r2dbc", relation).block());
+                assertEquals(ErrorCode.RELATION_NOT_ALLOWED, error.code());
+                assertEquals(0, calls.get(), "protected tables must not reach metadata lookup");
+            }
+        }
+    }
+
+    @Test
     void selectsTheMetadataProviderByAdapterWhenDescribing() {
         var restCalls = new AtomicInteger();
         var r2dbcCalls = new AtomicInteger();

@@ -5,6 +5,10 @@ function Check-Case([string]$Name, [hashtable]$Files, [bool]$Pass, [string]$Expe
     $folder = Join-Path $suite $Name
     $null = New-Item -ItemType Directory -Path (Join-Path $folder 'scripts') -Force
     Copy-Item (Join-Path $PSScriptRoot 'quality-gate.ps1') (Join-Path $folder 'scripts/quality-gate.ps1')
+    Copy-Item (Join-Path $PSScriptRoot 'test-download-target.mjs') (Join-Path $folder 'scripts/test-download-target.mjs')
+    $assets = Join-Path $folder 'src/main/resources/static'
+    $null = New-Item -ItemType Directory -Path $assets -Force
+    Copy-Item (Join-Path $root 'src/main/resources/static/app.js') (Join-Path $assets 'app.js')
     foreach ($path in $Files.Keys) {
         $destination = Join-Path $folder $path
         $null = New-Item -ItemType Directory -Path (Split-Path $destination) -Force

@@ -30,6 +30,7 @@ public final class RestRowSource implements RowSource {
 
     private static final String SELECT_PARAM = "select=";
 
+    private static final String SINGLE_ROW_LIMIT = "&limit=1";
     private final DataApiClient client;
     private final RowJsonMapper mapper;
     private final Function<String, Mono<RelationDescriptor>> descriptorResolver;
@@ -139,7 +140,7 @@ public final class RestRowSource implements RowSource {
     private String countAllUrl(Selection selection, List<FilterSpec> filters) {
         var query = new StringBuilder()
                 .append(SELECT_PARAM).append(encodedIdentifier(selection.keyColumn()))
-                .append("&limit=1");
+                .append(SINGLE_ROW_LIMIT);
         appendFilters(query, filters);
         return path(selection.relation(), query);
     }
@@ -157,7 +158,7 @@ public final class RestRowSource implements RowSource {
     private String countUrl(Selection selection, List<FilterSpec> filters, long highWater) {
         var query = new StringBuilder()
                 .append(SELECT_PARAM).append(encodedIdentifier(selection.keyColumn()))
-                .append("&limit=1")
+                .append(SINGLE_ROW_LIMIT)
                 .append('&').append(encodedIdentifier(selection.keyColumn()))
                 .append("=lte.").append(highWater);
         appendFilters(query, filters);
@@ -271,7 +272,7 @@ public final class RestRowSource implements RowSource {
         var query = new StringBuilder()
                 .append(SELECT_PARAM).append(encodedIdentifier(selection.keyColumn()))
                 .append("&order=").append(encodedIdentifier(selection.keyColumn())).append(".desc")
-                .append("&limit=1");
+                .append(SINGLE_ROW_LIMIT);
         appendFilters(query, filters);
         return path(selection.relation(), query);
     }
@@ -326,8 +327,8 @@ public final class RestRowSource implements RowSource {
             throw new ExportException(ErrorCode.UPSTREAM_CLIENT_ERROR,
                     "IN filter value must be a collection: " + filter.column());
         }
-        var encoded = new ArrayList<String>();
-        for (var value : values) encoded.add(encode(String.valueOf(value)));
+        var encoded = java.util.stream.StreamSupport.stream(values.spliterator(), false)
+                .map(value -> encode(String.valueOf(value))).toList();
         return "(" + String.join(",", encoded) + ")";
     }
 

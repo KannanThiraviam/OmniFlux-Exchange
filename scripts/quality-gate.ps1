@@ -1,4 +1,4 @@
-param([switch]$Staged, [switch]$RepositoryOnly)
+param([switch]$Staged, [switch]$ForPush, [switch]$RepositoryOnly)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 Set-Location (Split-Path $PSScriptRoot -Parent)
@@ -9,10 +9,16 @@ function Git-Lines([string[]]$Arguments) {
     return $result
 }
 try {
+    if ($Staged -and $ForPush) { throw 'Use either -Staged or -ForPush, not both.' }
+    if ($ForPush) {
+        $dirty = @(Git-Lines @('status', '--porcelain', '--untracked-files=normal'))
+        if ($dirty.Count) {
+            throw 'Pre-push verification requires a clean index and working tree, including non-ignored untracked files. Commit the intended changes first so the gate tests exactly HEAD.'
+        }
+    }
     $files = @(Git-Lines @('ls-files', '--cached', '--others', '--exclude-standard') | Sort-Object -Unique | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf })
     if ($Staged) {
         $changed = @(Git-Lines @('diff', '--cached', '--name-only', '--diff-filter=ACMRD'))
-        if ($changed.Count -eq 0) { Write-Host 'No staged changes.'; exit 0 }
         # Maven reads the working tree: fail closed instead of testing different code
         # from the commit or automatically stashing the operator's work.
         $unstaged = @(Git-Lines @('diff', '--name-only'))
@@ -26,14 +32,14 @@ try {
             throw 'Product/tooling changes require a staged current-doc update (README, getting started, status, architecture, quality gates, or docs/CHANGELOG.md with a specific no-doc-impact explanation).'
         }
     }
-    Write-Host '[1/3] Repository hygiene and documentation links'
+    Write-Host '[1/4] Repository hygiene and documentation links'
     $problems = [System.Collections.Generic.List[string]]::new()
     foreach ($file in $files) {
         if ($file -match '(^|/)(\.env($|\.(?!example$))|id_rsa|id_ed25519)$|\.(pem|p12|pfx|dump|hprof)$|(^|/)(target|node_modules|\.venv)/') {
             $problems.Add("Blocked generated/private file: $file")
         }
         if ((Get-Item -LiteralPath $file).Length -gt 1MB) { $problems.Add("File exceeds 1 MiB: $file") }
-        if ($file -notmatch '\.(java|xml|md|yml|yaml|json|ps1|sh|properties|sql|html|css|js|mjs|py|example)$|(^|/)(Dockerfile|pre-commit|\.gitignore)$') { continue }
+        if ($file -notmatch '\.(java|xml|md|yml|yaml|json|ps1|sh|properties|sql|html|css|js|mjs|py|example)$|(^|/)(Dockerfile|pre-commit|pre-push|reference-transaction|\.gitignore)$') { continue }
         $body = [IO.File]::ReadAllText((Join-Path $root $file))
         if ($body -match '(?m)^(<<<<<<< |=======$|>>>>>>> )') { $problems.Add("Merge conflict marker: $file") }
         if ($body -match '-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{50,}|AKIA[0-9A-Z]{16}') { $problems.Add("Possible credential: $file (value withheld)") }
@@ -71,12 +77,29 @@ try {
         }
     }
     if ($problems.Count) { throw ($problems -join "`n") }
+    & node (Join-Path $PSScriptRoot 'test-download-target.mjs')
+    if ($LASTEXITCODE -ne 0) { throw 'Dashboard download-origin regression checks failed.' }
     if ($RepositoryOnly) { Write-Host 'Repository checks passed (Maven not requested).'; exit 0 }
-    Write-Host '[2/2] Java lint, dead-code audit, clean compilation, Testcontainers suite, and 85% core coverage'
+    Write-Host '[2/4] Java lint, dead-code audit, compilation, unit/integration tests, and 85% core coverage'
     $maven = if ($IsWindows) { '.\mvnw.cmd' } else { './mvnw' }
-    & $maven -B clean verify '-Pcode-audit'
+    & $maven -B verify '-Pcode-audit'
     if ($LASTEXITCODE -ne 0) { throw 'Maven quality gate failed.' }
-    Write-Host 'All pre-commit quality gates passed.'
+    Write-Host '[3/4] Strict documentation build and diagram source-hash checks'
+    $docsTool = if ($IsWindows) { Join-Path $root '.tmp_logs/docs-venv/Scripts/mkdocs.exe' }
+                else { Join-Path $root '.tmp_logs/docs-venv/bin/mkdocs' }
+    if (-not (Test-Path -LiteralPath $docsTool)) {
+        $installedDocsTool = Get-Command mkdocs -ErrorAction SilentlyContinue
+        if (-not $installedDocsTool) { throw 'MkDocs is required. Install the documentation environment using docs/DOCUMENTATION.md.' }
+        $docsTool = $installedDocsTool.Source
+    }
+    # Use a fresh ignored output directory; leave earlier build artifacts intact.
+    $docsOutput = Join-Path $root ('.tmp_logs/gate-docs-' + [guid]::NewGuid().ToString('N'))
+    & $docsTool build --strict --site-dir $docsOutput
+    if ($LASTEXITCODE -ne 0) { throw 'Strict documentation build failed.' }
+    Write-Host '[4/4] Available Snyk, SonarCloud, and Dependabot checks'
+    & pwsh -NoProfile -File (Join-Path $PSScriptRoot 'security-gate.ps1')
+    if ($LASTEXITCODE -ne 0) { throw 'Security findings block this operation. See the scanner reports above.' }
+    Write-Host 'Required local gates passed. External scan results, including any SKIPPED checks, are listed above.'
 } catch {
     Write-Error $_ -ErrorAction Continue
     exit 1

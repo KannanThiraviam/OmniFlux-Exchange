@@ -10,11 +10,12 @@ import com.omniflux.exchange.meta.SchemaCatalog;
 import com.omniflux.exchange.security.AuthContext;
 import com.omniflux.exchange.source.*;
 import org.springframework.r2dbc.core.DatabaseClient;
+import org.springframework.r2dbc.connection.R2dbcTransactionManager;
+import org.springframework.transaction.reactive.TransactionalOperator;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.math.BigInteger;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.OptionalLong;
@@ -30,6 +31,7 @@ public final class R2dbcRowSource implements RowSource {
     private final ExportTiming timing;
     private final Integer pageSizeOverride;
     private final AuthContext auth;
+    private final TransactionalOperator transactions;
 
     public R2dbcRowSource(DatabaseClient client, SchemaCatalog catalog,
                           SqlDialect dialect, OmnifluxProperties props,
@@ -45,6 +47,10 @@ public final class R2dbcRowSource implements RowSource {
         }
         this.pageSizeOverride = pageSizeOverride;
         this.auth = auth;
+        this.transactions = TransactionalOperator.create(
+                new R2dbcTransactionManager(client.getConnectionFactory()));
+        // Validate before an export starts; SET LOCAL must never silently disable the deadline.
+        dialect.queryTimeoutHint(props.security().queryTimeout());
     }
 
     @Override
@@ -153,20 +159,38 @@ public final class R2dbcRowSource implements RowSource {
                     return new DbRow(values);
                 })
                 .all();
-        return timing == null ? result : result.doFinally(signal ->
+        // The query and its deadline setting share one transaction and connection.
+        // Database cancellation ends blocked work; cleanup restores the prior setting.
+        Flux<DbRow> bounded = transactions.transactional(
+                client.sql(dialect.queryTimeoutHint(props.security().queryTimeout()))
+                        .fetch().rowsUpdated().thenMany(result))
+                .takeUntilOther(Mono.delay(props.security().queryTimeout())
+                        .flatMap(ignored -> Mono.error(new ExportException(ErrorCode.QUERY_TIMEOUT,
+                                "R2DBC query exceeded security.query-timeout"))))
+                .onErrorMap(R2dbcRowSource::isQueryTimeout,
+                        error -> error instanceof ExportException ? error
+                                : new ExportException(ErrorCode.QUERY_TIMEOUT,
+                                        "R2DBC query exceeded security.query-timeout", error));
+        return timing == null ? bounded : bounded.doFinally(signal ->
                 timing.addSourceRead(System.nanoTime() - started));
+    }
+
+    private static boolean isQueryTimeout(Throwable error) {
+        for (Throwable current = error; current != null; current = current.getCause()) {
+            if (current instanceof io.r2dbc.spi.R2dbcException databaseError
+                    && "57014".equals(databaseError.getSqlState())) return true;
+            if (current instanceof java.util.concurrent.TimeoutException) return true;
+        }
+        return false;
     }
 
     private static List<ColumnDescriptor> requestedColumns(RelationDescriptor meta, ExportRequest request) {
         List<String> names = request.columns() == null || request.columns().isEmpty()
                 ? meta.columns().stream().map(ColumnDescriptor::name).toList() : request.columns();
-        List<ColumnDescriptor> requested = new ArrayList<>(names.size());
-        for (String name : names) {
-            requested.add(meta.columns().stream().filter(column -> column.name().equals(name))
-                    .findFirst().orElseThrow(() -> new ExportException(ErrorCode.UNKNOWN_COLUMN,
-                            "unknown column: " + name)));
-        }
-        return List.copyOf(requested);
+        return names.stream().map(name -> meta.columns().stream()
+                .filter(column -> column.name().equals(name)).findFirst()
+                .orElseThrow(() -> new ExportException(ErrorCode.UNKNOWN_COLUMN, "unknown column: " + name)))
+                .toList();
     }
 
     private static RowRecord toRowRecord(DbRow row, String key, List<ColumnDescriptor> columns) {

@@ -99,10 +99,10 @@ sequenceDiagram
     participant W as Worker
     participant DB as Job store
     participant O as Object storage
-    W->>DB: Complete using current claim token
-    alt Update affects one row
+    W->>DB: Complete with current token and unexpired lease
+    alt All publication checks pass
         DB-->>W: Result published
-    else Claim no longer matches
+    else Ownership, lease, or cancellation check fails
         DB-->>W: Publication rejected
         W->>O: Delete unreferenced completed object
     end
@@ -112,7 +112,7 @@ sequenceDiagram
 
 Publication stores the object key, counts, SHA-256, high-water key, and completion timestamp. A completed upload cannot be aborted as a multipart session. If publication is rejected, the worker attempts to delete the object. Reconciliation is an additional recovery path for abandoned objects and uploads.
 
-There is an unresolved lease-boundary gap: `markCompleted` checks token, status, and cancellation, but does not explicitly check lease expiry. See the [implementation status](../IMPLEMENTATION_STATUS.md#known-correctness-gaps).
+`markCompleted` requires the matching claim token, `IN_PROGRESS` status, no cancellation request, and `lease_until >= clock_timestamp()` at the database update. An expired claim cannot publish even before the sweeper replaces its token.
 
 ```mermaid
 sequenceDiagram
@@ -158,7 +158,7 @@ stateDiagram-v2
 | Expiry recovery | Sweeper observes an expired lease and requeues or fails at the budget limit. |
 | Manual retry | Owner targets a failed or cancelled job and the queue has capacity. The current implementation does not enforce the automatic retry limit on this action. |
 | Running cancellation | Owner sets `cancel_requested`. Renewal fails, which stops execution and enables the fenced cancellation transition. |
-| Shutdown requeue | Drain expires and the current claim is released. Current object-key reuse is an unresolved race. |
+| Shutdown requeue | Drain expires, execution is cancelled, and the claim is released without spending retry budget. Each new claim has a distinct storage key containing its token. |
 
 ## Lease and fencing
 
@@ -166,11 +166,11 @@ A **lease** is temporary permission for one worker to run a job. The job row rec
 
 **Fencing** means rejecting updates from a worker that no longer owns the job. Each claim gets a new random `claim_token`, which acts as the worker's ownership credential. Database updates must match the current token. This service uses a UUID token checked in PostgreSQL, rather than a monotonically increasing number checked by object storage.
 
-For example, worker A claims a job with token A, then pauses long enough for its lease to expire. After recovery, worker B claims the job with token B. If A resumes and tries to update the job using token A, its database update affects zero rows because the stored token is now B. This protects database state after ownership changes; the remaining lease-expiry and storage-handoff gaps are listed in [Implementation status](../IMPLEMENTATION_STATUS.md#known-correctness-gaps).
+For example, worker A claims a job with token A, then pauses long enough for its lease to expire. After recovery, worker B claims the job with token B. If A resumes and tries to update the job using token A, its database update affects zero rows because the stored token is now B. Completion also rejects A if its lease has expired before B claims the job. Storage keys include the claim token, so A cannot overwrite or delete B's object even if shutdown restores the attempt counter. Reconciliation identifies abandoned objects by their claim token and protects published keys.
 
 The default lease duration is 60 seconds and renewal interval is 15 seconds. Renewal uses its own scheduler and does not wait for a source page or an upload part. It requires the current token, an active job, no cancellation request, and an unexpired lease.
 
-A worker whose token has been replaced cannot update the replacement claim. Renewal failure cancels the export publisher. The sweeper recovers expired claims. Cancellation currently shares the lease-loss signal and is reported as `lease_lost` in worker outcome telemetry.
+A worker whose token has been replaced cannot update the replacement claim. Renewal failure cancels the export publisher. The sweeper recovers expired claims. Owner cancellation uses the same execution-stop signal, but the worker checks the persisted cancellation state and reports `cancelled`, including when the sweeper or failure transition completed the cancellation first. A lost claim without cancellation reports `lease_lost`; shutdown disposal reports `shutdown`.
 
 ## Memory budget
 
@@ -194,7 +194,7 @@ R2DBC guards variable-width values in SQL before retrieving oversized fields. RE
 
 `SchemaCatalog` restricts relation identifiers and requested columns, requires the integer key contract, and bounds IN lists. PostgreSQL identifiers are quoted and filter values are bound. REST queries encode supported operators and values. Fine-grained row entitlements come from the Data API or configured source database role.
 
-The configured `security.query-timeout` is currently unused by `R2dbcRowSource.execute`. A blocked query can continue while lease renewal holds its admission slot. This is a production follow-up, not an implemented timeout guarantee.
+Each R2DBC high-water, count, and page query runs in a transaction with `SET LOCAL statement_timeout` derived from `omniflux.security.query-timeout` (default 30 seconds). A client deadline also bounds connection acquisition and result delivery. Blocked SQL is cancelled in PostgreSQL; transaction completion or rollback restores the previous timeout setting. The deadline applies separately to each query, not the total export duration. Timeout errors use `QUERY_TIMEOUT` and the transient retry policy. The catalog rejects all four service-owned relations even when an operator allowlists them.
 
 ## Cache eligibility
 

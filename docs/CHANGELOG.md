@@ -4,6 +4,18 @@ Project changes before the first release are summarized here. This file is a hum
 
 ## Unreleased
 
+- Added a controlled baseline-versus-latest export benchmark and evidence report: 80 samples, 128 verified jobs, matching limits and fixtures, with measured R2DBC CSV time increases of about 9% and REST median changes of about 1%. Documented the owner's publication exception for the five deferred Snyk Code findings; normal hooks remain blocking.
+
+- Restricted dashboard downloads to the configured public storage origin and configured virtual-hosted bucket, with regression checks in both hooks. Corrected the Snyk Code review guidance: gateway-supplied identity headers do not establish CSRF protection when the gateway authenticates browser cookies or sessions. Remaining findings stay blocking pending implementation or a scoped review.
+
+- Added optional Snyk, SonarCloud, and Dependabot checks to both Git hooks. Unavailable scans print explicit SKIPPED reasons; completed findings block. Dependabot comparisons use current locally resolved dependencies rather than blocking fixes on stale remote alerts.
+- Updated Jackson 2 and 3 dependency families and Material for MkDocs to patched versions. Locked docs dependencies with hashes and wheel-only installs. Corrected Sonar findings and added real export/metadata and credential/row-validation regression coverage.
+
+- Made pre-commit and pre-push run the full local quality gate: repository checks, Maven unit/integration tests, Checkstyle/PMD, coverage, and strict documentation builds. Added staged/clean-checkout safeguards and documented the optional operator `git push --no-verify` shortcut after a verified commit.
+
+- Fixed all five previously documented correctness gaps: immutable claim-specific object keys and shutdown cancellation ordering, R2DBC query deadlines with PostgreSQL cancellation, lease-expiry checks on publication, protection of all service-owned tables, and distinct cancellation logs/metrics. Added targeted regression tests and updated the status, operations, architecture, and lease ADR documentation.
+- Clarified that Testcontainers requires Docker, creates suite-owned PostgreSQL/SeaweedFS containers, and does not require the Compose stack, `.env`, or manually configured application environment variables.
+
 - Reviewed maintained guides for first-time users. Added a complete Docker/dashboard walkthrough, a bounded three-row API export with a polling deadline and saved download, explicit local endpoint/data inspection steps, and a technology/tool reference.
 - Explained Flyway, migration history, the local V1 baseline, and psql shortcuts. Corrected seed target-count semantics, Unix executable-permission setup, stale storage credential aliases, and overstatements about lease safety and memory guarantees.
 

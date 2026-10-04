@@ -16,13 +16,14 @@ import org.springframework.web.server.ServerWebInputException;
 /** Converts domain failures into stable, non-sensitive JSON responses. */
 @RestControllerAdvice
 public final class ErrorHandler {
+    private static final String REQUEST_FAILED = "request failed";
     private static final Logger LOG = LoggerFactory.getLogger(ErrorHandler.class);
 
     @ExceptionHandler(ExportException.class)
     public ResponseEntity<ProblemDetail> exportFailure(ExportException error) {
         String detail = error.detail();
         return problem(HttpStatus.valueOf(error.code().httpStatus()), error.code().name(),
-                detail == null || detail.isBlank() ? "request failed" : detail);
+                detail == null || detail.isBlank() ? REQUEST_FAILED : detail);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
@@ -46,7 +47,7 @@ public final class ErrorHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ProblemDetail> unexpected(Exception error) {
         LOG.error("Unhandled web request failure", error);
-        return problem(HttpStatus.INTERNAL_SERVER_ERROR, ErrorCode.INTERNAL_ERROR.name(), "request failed");
+        return problem(HttpStatus.INTERNAL_SERVER_ERROR, ErrorCode.INTERNAL_ERROR.name(), REQUEST_FAILED);
     }
 
     private static ResponseEntity<ProblemDetail> problem(HttpStatus status, String code, String message) {
@@ -59,6 +60,6 @@ public final class ErrorHandler {
 
     private static String safeMessage(Throwable error) {
         String message = error.getMessage();
-        return message == null || message.isBlank() ? "request failed" : message;
+        return message == null || message.isBlank() ? REQUEST_FAILED : message;
     }
 }

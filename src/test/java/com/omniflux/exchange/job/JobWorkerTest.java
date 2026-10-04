@@ -25,6 +25,7 @@ class JobWorkerTest {
     void successfulExecutionIsFencedAndMarkedComplete() {
         var repository = Mockito.mock(JobRepository.class);
         var job = inProgress();
+        when(repository.find(job.id())).thenReturn(Mono.just(job));
         var result = new JobResult("exports/data.csv", 2, 20, "sha", null, null);
         when(repository.markCompleted(eq(job.id()), eq(job.claimToken()), any(JobResult.class)))
                 .thenReturn(Mono.just(true));
@@ -43,6 +44,7 @@ class JobWorkerTest {
     void transientExecutionFailureIsPersistedWithItsErrorCode() {
         var repository = Mockito.mock(JobRepository.class);
         var job = inProgress();
+        when(repository.find(job.id())).thenReturn(Mono.just(job));
         when(repository.markFailed(eq(job.id()), eq(job.claimToken()),
                 eq(ErrorCode.QUERY_TIMEOUT), anyString())).thenReturn(Mono.just(true));
         try (var worker = new JobWorker(repository,
@@ -58,6 +60,7 @@ class JobWorkerTest {
     void unexpectedExecutionFailureIsNotClassifiedAsATransientStorageOutage() {
         var repository = Mockito.mock(JobRepository.class);
         var job = inProgress();
+        when(repository.find(job.id())).thenReturn(Mono.just(job));
         when(repository.markFailed(eq(job.id()), eq(job.claimToken()),
                 eq(ErrorCode.INTERNAL_ERROR), anyString())).thenReturn(Mono.just(true));
         try (var worker = new JobWorker(repository,
@@ -72,6 +75,7 @@ class JobWorkerTest {
     void sdkClientFailuresAreClassifiedAsTransientStorageFailures() {
         var repository = Mockito.mock(JobRepository.class);
         var job = inProgress();
+        when(repository.find(job.id())).thenReturn(Mono.just(job));
         when(repository.markFailed(eq(job.id()), eq(job.claimToken()),
                 eq(ErrorCode.STORAGE_UNAVAILABLE), anyString())).thenReturn(Mono.just(true));
         try (var worker = new JobWorker(repository,
@@ -87,8 +91,12 @@ class JobWorkerTest {
     void drainTimeoutFencedRequeuesAndCancelsTheActiveExecution() {
         var repository = Mockito.mock(JobRepository.class);
         var job = inProgress();
-        when(repository.requeueForShutdown(job.id(), job.claimToken())).thenReturn(Mono.just(true));
+        when(repository.find(job.id())).thenReturn(Mono.just(job));
         var cancelled = new AtomicBoolean();
+        when(repository.requeueForShutdown(job.id(), job.claimToken())).thenAnswer(ignored -> {
+            assertTrue(cancelled.get(), "execution must be cancelled before releasing the claim");
+            return Mono.just(true);
+        });
         var properties = TestProps.with(java.util.Map.of(
                 "omniflux.queue.lease-renew-interval", "1s",
                 "omniflux.queue.drain-timeout", "20ms"));
@@ -113,6 +121,48 @@ class JobWorkerTest {
         worker.stopAccepting();
         assertTrue(worker.run(inProgress()).blockOptional().isEmpty());
         worker.close();
+    }
+
+    @Test
+    void ownerCancellationAndLostClaimsHaveDistinctMetrics() {
+        for (boolean cancelled : new boolean[] {true, false}) {
+            var repository = Mockito.mock(JobRepository.class);
+            var job = inProgress();
+            when(repository.find(job.id())).thenReturn(Mono.just(job));
+            when(repository.markCancelled(job.id(), job.claimToken())).thenReturn(Mono.just(cancelled));
+            var registry = new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
+            try (var worker = new JobWorker(repository, ignored -> Mono.empty(), PROPERTIES,
+                    new JobTelemetry(registry))) {
+                worker.run(job).block();
+                assertEquals(1.0, registry.get("omniflux.jobs.finished")
+                        .tag("outcome", cancelled ? "cancelled" : "lease_lost").counter().count());
+                assertNull(registry.find("omniflux.jobs.finished")
+                        .tag("outcome", cancelled ? "lease_lost" : "cancelled").counter());
+            }
+            registry.close();
+        }
+    }
+
+    @Test
+    void cancellationPersistedBySweeperOrFailureRaceStillReportsCancelled() {
+        for (boolean failureRace : new boolean[] {true, false}) {
+            var repository = Mockito.mock(JobRepository.class);
+            var job = inProgress();
+            when(repository.find(job.id())).thenReturn(Mono.just(job.toBuilder().status(JobStatus.CANCELLED).build()));
+            when(repository.markCancelled(job.id(), job.claimToken())).thenReturn(Mono.just(false));
+            when(repository.markFailed(eq(job.id()), eq(job.claimToken()), any(), anyString()))
+                    .thenReturn(Mono.just(true));
+            var registry = new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
+            JobExecution execution = ignored -> failureRace
+                    ? Mono.error(new ExportException(ErrorCode.QUERY_TIMEOUT, "timeout")) : Mono.empty();
+            try (var worker = new JobWorker(repository, execution, PROPERTIES, new JobTelemetry(registry))) {
+                worker.run(job).block();
+                assertEquals(1.0, registry.get("omniflux.jobs.finished").tag("outcome", "cancelled").counter().count());
+                assertNull(registry.find("omniflux.jobs.finished").tag("outcome", "lease_lost").counter());
+                assertNull(registry.find("omniflux.jobs.finished").tag("outcome", "failed").counter());
+            }
+            registry.close();
+        }
     }
 
     @Test

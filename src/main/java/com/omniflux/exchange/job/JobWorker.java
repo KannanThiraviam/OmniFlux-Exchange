@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /** Executes one claimed job and fences every state transition through the repository. */
 public final class JobWorker implements AutoCloseable {
     private static final Logger LOG = LoggerFactory.getLogger(JobWorker.class);
+    private static final String CANCELLED_OUTCOME = "cancelled";
     private final JobRepository repository;
     private final JobExecution execution;
     private final OmnifluxProperties properties;
@@ -61,7 +62,7 @@ public final class JobWorker implements AutoCloseable {
             activeRuns.put(job.id(), active);
         }
         long startedAt = System.nanoTime();
-        var outcome = new java.util.concurrent.atomic.AtomicReference<>("cancelled");
+        var outcome = active.outcome;
         telemetry.started();
         return Mono.<Void, LeaseRenewer>using(
                 () -> new LeaseRenewer(repository, job, properties),
@@ -88,8 +89,18 @@ public final class JobWorker implements AutoCloseable {
                                         });
                             })
                             .onErrorResume(LeaseLost.class, ignored -> {
-                                outcome.set("lease_lost");
-                                return repository.markCancelled(job.id(), job.claimToken()).then();
+                                return repository.markCancelled(job.id(), job.claimToken())
+                                        .flatMap(cancelled -> Boolean.TRUE.equals(cancelled)
+                                                ? Mono.just(true) : isCancelled(job))
+                                        .doOnNext(cancelled -> {
+                                            if (Boolean.TRUE.equals(cancelled)) {
+                                                outcome.set(CANCELLED_OUTCOME);
+                                                LOG.info("Cancelled export job {} at owner request", job.id());
+                                            } else {
+                                                outcome.set("lease_lost");
+                                                LOG.warn("Export job {} lost its claim", job.id());
+                                            }
+                                        }).then();
                             })
                             .onErrorResume(error -> handleFailure(job, error, outcome))
                             .doFinally(ignored -> {
@@ -98,9 +109,7 @@ public final class JobWorker implements AutoCloseable {
                             });
                 },
                 LeaseRenewer::close)
-                .doOnSubscribe(subscription -> {
-                    active.subscription.set(subscription);
-                })
+                .doOnSubscribe(active.subscription::set)
                 .doFinally(ignored -> {
                     activeRuns.remove(job.id(), active);
                     telemetry.finished(outcome.get(), Duration.ofNanos(System.nanoTime() - startedAt));
@@ -124,17 +133,18 @@ public final class JobWorker implements AutoCloseable {
         // another attempt during a normal rolling shutdown.
         long deadline = System.nanoTime() + properties.queue().drainTimeout().toNanos();
         synchronized (drainMonitor) {
-            while (!activeRuns.isEmpty()) {
+            boolean interrupted = false;
+            while (!activeRuns.isEmpty() && !interrupted) {
                 long remaining = deadline - System.nanoTime();
                 if (remaining <= 0) {
                     break;
                 }
                 try {
                     TimeUnit.NANOSECONDS.timedWait(drainMonitor, remaining);
-                } catch (InterruptedException interrupted) {
+                } catch (InterruptedException _) {
                     Thread.currentThread().interrupt();
                     LOG.warn("Shutdown drain interrupted with {} export(s) still running", activeRuns.size());
-                    break;
+                    interrupted = true;
                 }
             }
         }
@@ -143,19 +153,23 @@ public final class JobWorker implements AutoCloseable {
             LOG.warn("Shutdown drain timed out with {} export(s) still running; requeuing claims",
                     remainingRuns.size());
             for (ActiveRun active : remainingRuns) {
-                try {
-                    Boolean requeued = repository.requeueForShutdown(active.job.id(), active.job.claimToken())
-                            .block(java.time.Duration.ofSeconds(5));
-                    if (!Boolean.TRUE.equals(requeued)) {
-                        LOG.warn("Could not requeue shutdown claim for job {}; claim may have changed", active.job.id());
-                    }
-                } catch (RuntimeException error) {
-                    LOG.error("Failed to requeue shutdown claim for job {}", active.job.id(), error);
-                } finally {
-                    Subscription subscription = active.subscription.get();
-                    if (subscription != null) subscription.cancel();
-                }
+                cancelAndRequeue(active);
             }
+        }
+    }
+
+    private void cancelAndRequeue(ActiveRun active) {
+        active.outcome.set("shutdown");
+        Subscription subscription = active.subscription.get();
+        if (subscription != null) subscription.cancel();
+        try {
+            Boolean requeued = repository.requeueForShutdown(active.job.id(), active.job.claimToken())
+                    .block(Duration.ofSeconds(5));
+            if (!Boolean.TRUE.equals(requeued)) {
+                LOG.warn("Could not requeue shutdown claim for job {}; claim may have changed", active.job.id());
+            }
+        } catch (RuntimeException error) {
+            LOG.error("Failed to requeue shutdown claim for job {}", active.job.id(), error);
         }
     }
 
@@ -172,11 +186,29 @@ public final class JobWorker implements AutoCloseable {
             return Mono.empty();
         }
         ErrorCode code = classifyFailure(cause);
-        LOG.error("Export job {} failed with {}", job.id(), code, cause);
         return repository.markFailed(job.id(), job.claimToken(), code,
                 cause.getMessage() == null ? code.name() : cause.getMessage())
-                .doOnSuccess(ignored -> outcome.set("failed"))
-                .then();
+                .flatMap(updated -> {
+                    if (!Boolean.TRUE.equals(updated)) {
+                        outcome.set("lease_lost");
+                        LOG.warn("Export job {} lost its claim while recording failure", job.id());
+                        return Mono.empty();
+                    }
+                    return isCancelled(job).doOnNext(cancelled -> {
+                        if (Boolean.TRUE.equals(cancelled)) {
+                            outcome.set(CANCELLED_OUTCOME);
+                            LOG.info("Cancelled export job {} at owner request", job.id());
+                        } else {
+                            outcome.set("failed");
+                            LOG.error("Export job {} failed with {}", job.id(), code, cause);
+                        }
+                    }).then();
+                });
+    }
+
+    private Mono<Boolean> isCancelled(TransferJob job) {
+        return repository.find(job.id()).map(current -> current.status() == JobStatus.CANCELLED)
+                .defaultIfEmpty(false);
     }
 
     private static Throwable unwrap(Throwable error) {
@@ -220,6 +252,7 @@ public final class JobWorker implements AutoCloseable {
     private static final class ActiveRun {
         private final TransferJob job;
         private final AtomicReference<Subscription> subscription = new AtomicReference<>();
+        private final AtomicReference<String> outcome = new AtomicReference<>(CANCELLED_OUTCOME);
         private ActiveRun(TransferJob job) { this.job = job; }
     }
 }

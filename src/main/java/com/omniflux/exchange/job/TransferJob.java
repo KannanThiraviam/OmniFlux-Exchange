@@ -138,10 +138,11 @@ public record TransferJob(UUID id, String direction, JobStatus status, Principal
     }
 
     public String attemptObjectKey(String prefix, String extension) {
+        Objects.requireNonNull(claimToken, "storage identity requires a claim token");
         String cleanPrefix = prefix == null ? "" : prefix;
         String cleanExtension = extension == null || extension.isBlank()
                 ? "bin" : extension.replaceFirst("^\\.", "");
-        return cleanPrefix + id + "/a" + Math.max(1, attemptCount)
+        return cleanPrefix + id + "/a" + Math.max(1, attemptCount) + "/c" + claimToken
                 + "/data." + cleanExtension;
     }
 

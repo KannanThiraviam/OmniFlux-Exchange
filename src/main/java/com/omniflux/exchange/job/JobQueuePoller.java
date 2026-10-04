@@ -167,7 +167,7 @@ public final class JobQueuePoller implements AutoCloseable {
                 }
                 try {
                     java.util.concurrent.TimeUnit.NANOSECONDS.timedWait(claimsMonitor, remaining);
-                } catch (InterruptedException interrupted) {
+                } catch (InterruptedException _) {
                     Thread.currentThread().interrupt();
                     LOG.warn("Interrupted while waiting for queue claims before worker drain");
                     return;

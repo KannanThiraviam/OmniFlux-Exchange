@@ -25,13 +25,14 @@
     <reactor-test.version>3.8.7</reactor-test.version>
     <testcontainers.version>1.21.4</testcontainers.version>
     <!-- Vulnerability floors (Snyk): scram < 3.3 fails open on auth errors,
-         jackson-databind 3.1.5 has unsafe-reflection + deserialization fixes
-         in 3.1.6. r2dbc-postgresql 1.1.2 is the newest 1.1.x, so SCRAM is
+         Jackson 2.21.7 and 3.1.7 contain the current parser and databind security fixes. r2dbc-postgresql 1.1.2 is the newest 1.1.x, so SCRAM is
          pinned here rather than bumped via the driver. logback 1.5.38 has a
          directory-traversal advisory fixed in 1.6.3 (SNYK-JAVA-CHQOSLOGBACK-
          19882330); Boot 4.1 manages 1.5.x, so the floor is raised here. -->
     <ongres-scram.version>3.3</ongres-scram.version>
-    <jackson-databind.version>3.1.6</jackson-databind.version>
+    <jackson-databind.version>3.1.7</jackson-databind.version>
+    <jackson-bom.version>3.1.7</jackson-bom.version>
+    <jackson-2-bom.version>2.21.7</jackson-2-bom.version>
     <logback.version>1.6.3</logback.version>
     <!-- aws-sdk 2.55.0 still resolves netty-codec-http 4.2.17, which has the
          HTTP request-smuggling advisory; the BOM floor lifts every netty

@@ -10,6 +10,7 @@ import reactor.core.publisher.Mono;
 /** Readiness probe for the persisted admission gate/configuration contract. */
 @Component("queueGateHealthIndicator")
 public final class QueueGateHealthIndicator implements ReactiveHealthIndicator {
+    private static final String CHECK = "check";
     private final JobRepository jobs;
     private final OmnifluxProperties properties;
 
@@ -21,16 +22,16 @@ public final class QueueGateHealthIndicator implements ReactiveHealthIndicator {
     @Override
     public Mono<Health> health() {
         return jobs.admissionGateMatchesConfiguration()
-                .map(matches -> matches
-                        ? Health.up().withDetail("check", "admission gate matches configuration").build()
+                .map(matches -> Boolean.TRUE.equals(matches)
+                        ? Health.up().withDetail(CHECK, "admission gate matches configuration").build()
                         : Health.outOfService()
-                                .withDetail("check", "admission gate/configuration mismatch")
+                                .withDetail(CHECK, "admission gate/configuration mismatch")
                                 .withDetail("configuredMaxConcurrent", properties.queue().maxConcurrent())
                                 .build())
                 // A transient database outage is not a process-liveness failure.
                 // UNKNOWN is HTTP 200 under Boot's default status mapping and this
                 // indicator belongs only to the readiness group.
                 .onErrorResume(ignored -> Mono.just(Health.unknown()
-                        .withDetail("check", "admission gate probe temporarily unavailable").build()));
+                        .withDetail(CHECK, "admission gate probe temporarily unavailable").build()));
     }
 }

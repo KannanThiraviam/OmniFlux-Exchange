@@ -193,6 +193,6 @@ For development outside the container, install JDK 25. To run the test suite on 
 .\mvnw.cmd -B verify
 ```
 
-On Unix, after the executable-permission step, use `./mvnw -B verify`. The integration suite starts its own PostgreSQL and SeaweedFS containers with Testcontainers. Docker must be running; the local Compose stack does not need to be running. See [Quality gates](QUALITY_GATES.md) for audit/security scans and [Implementation status](IMPLEMENTATION_STATUS.md) for scope and open correctness gaps.
+On Unix, after the executable-permission step, use `./mvnw -B verify`. The integration suite starts its own PostgreSQL and SeaweedFS containers with Testcontainers. Docker must be running; the local Compose stack does not need to be running. See [Quality gates](QUALITY_GATES.md) for audit/security scans and [Implementation status](IMPLEMENTATION_STATUS.md) for scope, completed correctness fixes, and remaining limitations.
 
 The proof runner is a separate measured workload, not part of the first-run walkthrough. Use [Operations](OPERATIONS.md#capacity-and-evidence) to interpret proof evidence.

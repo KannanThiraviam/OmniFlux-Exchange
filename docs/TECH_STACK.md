@@ -63,7 +63,7 @@ Read [Data model](data-model.md#flyway-and-startup-migrations) for the startup s
 | Actuator, Micrometer, Prometheus format | Expose health and metrics for diagnosis/monitoring. | Included endpoints; an external collector is a deployment choice. |
 | OpenShift manifests | Describe a production deployment template. | Not needed for the local walkthrough. |
 
-**Testcontainers** starts temporary dependencies for the Java test suite; it does not reuse the local Compose services. **JaCoCo** measures which code the tests execute. Passing tests/coverage do not establish that every concurrency boundary is correct; current gaps are recorded in [Implementation status](IMPLEMENTATION_STATUS.md).
+**Testcontainers** starts temporary dependencies for the Java test suite; it does not reuse the local Compose services. **JaCoCo** measures which code the tests execute. Passing tests/coverage do not establish that every concurrency boundary is correct; implemented safeguards and remaining limitations are recorded in [Implementation status](IMPLEMENTATION_STATUS.md).
 
 ## Documentation and automation
 

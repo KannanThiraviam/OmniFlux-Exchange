@@ -7,8 +7,8 @@ OmniFlux Exchange is a Spring Boot 4 / Java 25 service that streams allowlisted
 relations from a governed Data API (REST) or PostgreSQL (R2DBC) into CSV or XLSX
 objects in S3-compatible storage. Users then download them through short-lived
 presigned URLs. Jobs are durable, globally rate-limited across replicas, and
-coordinated through leases and fencing. Current recovery gaps are recorded in
-[Implementation status](docs/IMPLEMENTATION_STATUS.md#known-correctness-gaps).
+coordinated through leases and fencing. Completed correctness fixes and remaining
+implementation limitations are recorded in [Implementation status](docs/IMPLEMENTATION_STATUS.md).
 
 ## Why it exists
 
@@ -68,6 +68,12 @@ Run the tests (Docker required; the suite starts its own containers):
 ```sh
 ./mvnw -B verify          # Windows: .\mvnw.cmd -B verify
 ```
+
+Docker Engine must be running. Testcontainers starts separate PostgreSQL and
+SeaweedFS containers and supplies test connection settings automatically; the
+Compose stack, `.env`, and manually set application environment variables are
+unnecessary. See [Integration tests and Testcontainers](docs/QUALITY_GATES.md#integration-tests-and-testcontainers)
+for setup, lifecycle, and troubleshooting.
 
 Stop with `docker compose down`. Add `-v` only if you want to delete local data.
 

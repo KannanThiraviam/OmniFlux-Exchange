@@ -12,9 +12,14 @@ from any pod, sometimes several gigabytes at a time.
 
 ## Decision
 
-Exports are written as S3 multipart uploads to attempt-scoped keys
-(`exports/.../<job-id>/a<attempt>/data.csv|xlsx`) in
+Exports are written as S3 multipart uploads to claim-specific keys
+(`exports/<job-id>/a<attempt-count>/c<claim-token>/data.csv` or `data.xlsx`,
+using the configured export prefix) in
 an S3-compatible bucket (IBM COS or AWS S3 in production, SeaweedFS locally).
+The claim token is part of the immutable storage identity. Shutdown can restore
+the attempt counter, but a new claim cannot reuse an earlier claim's key.
+Reconciliation also recognizes legacy `a<attempt-count>/data.<extension>` keys;
+it conservatively protects them while that attempt number has a live lease.
 Downloads are presigned GET URLs, signed locally with HMAC on each request and
 valid for 15 minutes. URLs are never stored.
 

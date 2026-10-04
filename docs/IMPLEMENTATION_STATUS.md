@@ -25,29 +25,81 @@ This page records the v1 scope visible in the current source tree. It is not a r
 - Distributed tracing is not implemented. `/api/system/resources` remains an application-specific snapshot alongside the Prometheus scrape endpoint.
 - XLSX supports one worksheet and is limited to 1,000,000 data rows.
 
-## Known correctness gaps
+## Correctness fixes
 
-Checked against the current source on 2026-10-03. These items remain open; passing CI does not establish that they are fixed.
+The five correctness gaps previously listed on this page are fixed in this source tree. They are no longer open work items. The regression tests below exercise the affected boundaries; this statement does not certify every production workload or deployment.
 
-| Priority | Gap | Code and required follow-up |
+| Previous gap | Implemented behavior | Regression coverage |
 |---|---|---|
-| P1 | Shutdown can reuse an export object key. | [JobRepository](../src/main/java/com/omniflux/exchange/job/JobRepository.java) decrements the attempt count on shutdown requeue; [TransferJob](../src/main/java/com/omniflux/exchange/job/TransferJob.java) derives the key from that count. [JobWorker](../src/main/java/com/omniflux/exchange/job/JobWorker.java) releases the claim before cancelling execution. Give each claim an immutable storage identity. The upload handoff race is inferred from code and has not been reproduced. |
-| P1 | R2DBC query timeout is not enforced. | [R2dbcRowSource.execute](../src/main/java/com/omniflux/exchange/adapter/r2dbc/R2dbcRowSource.java) does not apply `security.query-timeout`. A blocked query can retain an admission slot while the lease renews. Enforce a query deadline and verify database cancellation. |
-| P2 | Completion does not require an unexpired lease. | [JobRepository.markCompleted](../src/main/java/com/omniflux/exchange/job/JobRepository.java) checks token, status, and cancellation, but not lease expiry. Reconciliation treats expired claims as abandoned. Align publication and reconciliation at the expiry boundary. |
-| P2 | Internal catalog protection is incomplete. | [SchemaCatalog](../src/main/java/com/omniflux/exchange/meta/SchemaCatalog.java) protects `transfer_jobs` and `admission_gate`, but not `transfer_job_attempts` or `flyway_schema_history`. Protect all service-owned relations even if an operator allowlists them. The default empty production allowlist prevents exposure by default. |
-| P2 | Cancellation diagnostics are incomplete. | [JobWorker](../src/main/java/com/omniflux/exchange/job/JobWorker.java) records renewal stopping as `lease_lost`, including cancellation, and does not log the successful cancellation transition. Distinguish cancellation in logs and outcome metrics. The previously reported 60-second cancellation latency has not been independently reproduced. |
+| Shutdown could reuse an export object key. | Every new object key includes the immutable claim token: `exports/<job-id>/a<attempt-count>/c<claim-token>/data.<extension>` with the configured prefix. Shutdown cancels execution before releasing the claim. Restoring the retry budget cannot reuse the old key. Reconciliation recognizes claim-specific keys and retains support for legacy keys. | `TransferJobTest`, `JobWorkerTest`, `JobRepositoryCancellationRaceTest` |
+| R2DBC query timeout was not enforced. | Each high-water, XLSX count, and page query applies `omniflux.security.query-timeout` (default 30 seconds). A transaction-local PostgreSQL `statement_timeout` cancels blocked SQL; a client deadline also bounds connection acquisition and result delivery. The timeout resets for each query, not for the whole export. | `R2dbcRowSourceTimeoutTest` holds an exclusive table lock, verifies `QUERY_TIMEOUT`, checks that the query stops in PostgreSQL while the lock remains held, and checks pooled-connection settings. |
+| Completion could accept an expired lease. | Publication locks the job row first, then requires the current claim token, `IN_PROGRESS` status, no cancellation request, and an unexpired lease according to the database clock. Waiting for a row lock cannot bypass expiry. | `JobRepositoryCancellationRaceTest` covers already expired leases and expiry while completion waits on a row lock. |
+| Internal catalog protection was incomplete. | `transfer_jobs`, `admission_gate`, `transfer_job_attempts`, and `flyway_schema_history` are rejected even when explicitly allowlisted. | `SchemaCatalogTest` covers plain and schema-qualified names. |
+| Cancellation diagnostics were incomplete. | Owner cancellation logs `Cancelled export job ... at owner request` and records `cancelled`, including cancellation persisted by the sweeper or a failure race. A lost claim records `lease_lost`; drain-timeout disposal records `shutdown`. | `JobWorkerTest` checks distinct outcome metrics. |
 
-Demo migration isolation remains open as described above. These gaps should be resolved before relying on unattended production exports.
+Tests live under [src/test/java/com/omniflux/exchange](../src/test/java/com/omniflux/exchange/). Run them using the commands in [Quality gates](QUALITY_GATES.md#integration-tests-and-testcontainers).
+
+Demo migration isolation remains deferred as described above. JWT authentication, application-managed fine-grained entitlements, and distributed tracing also remain unimplemented. Fixing these five correctness gaps does not change those limitations.
 
 ## Verification notes
 
-These are recorded runs; a documentation-only review does not rerun the Java suite or the clean-room setup. Current GitHub workflow results appear under [Actions](https://github.com/KannanThiraviam/OmniFlux-Exchange/actions).
+Current GitHub workflow results appear under [Actions](https://github.com/KannanThiraviam/OmniFlux-Exchange/actions). The results below distinguish verification of these fixes from the earlier clean-room setup run.
 
-Recorded full verification (2026-10-03, Windows 11, Docker Engine 29.8, JDK 25):
+### Verification of the five fixes
+
+On 2026-10-03, Windows 11, Docker Engine 29.8, JDK 25:
+
+- `mvnw.cmd -B verify -Pcode-audit`: 279 tests, 0 failures, 0 errors, 2 skipped. Checkstyle, PMD unused-code checks, and the JaCoCo core-coverage gate passed. Dependency analysis produced advisory warnings and did not fail the build.
+- The skipped checks are the built-image SIGTERM test (requires an application image) and an XLSX schema inspection test (the POI lite distribution lacks its schema resource). The five-fix regression tests ran without skips.
+- `pwsh -File scripts/quality-gate.ps1 -RepositoryOnly`: repository hygiene, syntax, and local documentation links passed.
+- `mkdocs build --strict`: documentation build and diagram source-hash checks passed.
+- This fix verification used Testcontainers-managed Docker dependencies. The earlier clean-room Compose bootstrap was not repeated for these changes.
+
+### Verification after security and hook updates
+
+On 2026-10-03, the updated source passed `mvnw.cmd -B verify -Pcode-audit`: 289 tests, 0 failures, 0 errors, and the same 2 skips described above. This includes unit and Docker-backed integration tests, PostgreSQL metadata coverage, and full CSV/XLSX exports through the worker and S3-compatible storage.
+
+- SonarCloud completed analysis successfully: quality gate `OK`, new-code coverage 80.0%, and 0 unresolved issues.
+- Authenticated Snyk Maven and documentation dependency scans reported 0 vulnerabilities after updating both Jackson dependency families and MkDocs Material. The docs scan uses the direct requirements file with the Python environment installed from the hashed lockfile.
+- All 3 current Dependabot alerts compare as `RESOLVED LOCALLY` against the updated dependencies. Remote alerts can remain open until these changes are pushed and GitHub reevaluates them.
+- Snyk Code still reports 5 findings covered by the reviews in [Quality gates](QUALITY_GATES.md#static-analysis-of-source-snyk-code). They remain blocking; no ignores or blanket exclusions were added.
+- OWASP dependency-check could not update NVD without a valid API key. That scan is unverified, not passed.
+
+Both Git hooks run the same required local checks and available external checks. An unavailable external scan prints `SKIPPED` and permits contributors to continue; a completed scan with findings blocks. The hook and scanner regression scripts exercise this behavior.
+
+### Restart recovery and download hardening
+
+On 2026-10-04, the previous uncommitted changes were recovered and reverified after a system restart:
+
+- Maven unit and Docker-backed integration tests passed again: 289 tests, 0 failures, 0 errors, 2 existing skips. Checkstyle, PMD, and the core-coverage gate passed.
+- Repository, hook, optional-scanner, and strict documentation checks passed. Snyk dependency scans passed; the three open Dependabot alerts still compare as resolved locally.
+- The dashboard now restricts download URLs to the configured public storage origin and, when enabled, its configured virtual-hosted bucket. Both hooks execute Node.js regression checks for accepted signed downloads and rejected malicious destinations. The updated checks and documentation build passed.
+- SonarCloud was rerun after the dashboard change: quality gate passed, with 0 unresolved issues.
+- Snyk Code still reports the same five findings after this hardening. The stream finding is reviewed as a false positive; the dashboard origin checks do not clear the scanner warning automatically. The three CSRF findings require verification of the actual gateway authentication and protection settings. No scanner exceptions were created.
+
+### Controlled performance comparison
+
+On 2026-10-04, the committed baseline and latest application were compared
+using matching container limits, the same source/storage fixture, disabled
+export caching, warm-ups, and alternating repeated blocks. All 80 samples and
+128 export jobs passed integrity and resource checks. Six measured samples
+per build and workload showed median worker export time changes of +8.88%
+for R2DBC CSV, +8.44% for four-job R2DBC CSV, +2.14% for R2DBC XLSX, +0.79%
+for REST CSV, and -1.07% for REST XLSX. Performance is not identical.
+
+The [comparison report](evidence/2026-10-04-controlled-performance.md) contains
+the method, raw evidence, memory-limit caveats, and scope. The owner explicitly
+deferred the five Snyk Code findings for publication; normal hooks continue to
+block on them and no ignores were added.
+
+### Earlier verification before these fixes
+
+Recorded on 2026-10-03, Windows 11, Docker Engine 29.8, JDK 25, against the earlier committed source:
 
 - `mvnw -B clean verify`: 269 tests, 0 failures, 2 skipped; Checkstyle and
-  the JaCoCo core-coverage gate passed. Integration tests use Testcontainers,
-  with no Compose stack or environment variables.
+  the JaCoCo core-coverage gate passed. Integration tests require Docker and start their own PostgreSQL and SeaweedFS
+  containers through Testcontainers. No prestarted Compose stack or manually
+  supplied application environment variables are required.
 - Clean-room first run from a copy of exactly the committed files, with no
   `.env` and no `OMNIFLUX_*` variables: `scripts/up.ps1 -Build` was healthy
   with a passing export smoke in 62 s, and `scripts/up.sh` (Git Bash) in 58 s.

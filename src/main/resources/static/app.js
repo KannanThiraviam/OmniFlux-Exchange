@@ -165,13 +165,27 @@
     return 'ui-' + Date.now() + '-' + Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
   }
 
-  // Presigned URLs legitimately point at a different origin than the app
-  // (object storage), so the host cannot be allowlisted here - but the
-  // protocol can: refuse anything that is not HTTP(S) before navigating.
-  function downloadTarget(rawUrl) {
-    const parsed = new URL(rawUrl, window.location.origin);
-    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
-      throw new Error('Refusing to navigate to a non-HTTP(S) download URL.');
+  // Trust storage configuration from the same-origin service, not the URL
+  // supplied by the download response. Preserve the signed path and query.
+  function downloadTarget(rawUrl, config) {
+    const endpoint = new URL(config['omniflux.storage.public-endpoint']);
+    const parsed = new URL(rawUrl);
+    if (!['https:', 'http:'].includes(endpoint.protocol) || endpoint.username || endpoint.password
+        || !['https:', 'http:'].includes(parsed.protocol) || parsed.username || parsed.password) {
+      throw new Error('Refusing an invalid storage download URL.');
+    }
+    const origins = new Set([endpoint.origin]);
+    if (config['omniflux.storage.path-style'] === false) {
+      const bucket = config['omniflux.storage.bucket'];
+      if (typeof bucket !== 'string' || !/^[a-z0-9][a-z0-9.-]*[a-z0-9]$/.test(bucket)) {
+        throw new Error('Invalid storage bucket configuration.');
+      }
+      const virtualEndpoint = new URL(endpoint);
+      virtualEndpoint.hostname = bucket + '.' + endpoint.hostname;
+      origins.add(virtualEndpoint.origin);
+    }
+    if (!origins.has(parsed.origin)) {
+      throw new Error('Refusing a download outside the configured storage origin.');
     }
     return parsed.toString();
   }
@@ -1017,8 +1031,9 @@
 
   async function downloadJob(id) {
     try {
+      const resources = await api('/api/system/resources');
       const response = await api('/api/jobs/' + encodeURIComponent(id) + '/download');
-      window.location.assign(downloadTarget(response.url));
+      window.location.assign(downloadTarget(response.url, resources.effectiveConfig));
     } catch (error) {
       showToast('Could not start the download: ' + error.message, true);
     }

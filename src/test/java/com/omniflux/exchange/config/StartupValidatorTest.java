@@ -10,6 +10,17 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class StartupValidatorTest {
 
+    @Test void queryDeadlineCannotBeDisabledOrRoundedDownToZero() {
+        for (String timeout : new String[] {"0s", "-1ms", "1ns"}) {
+            var validator = new StartupValidator(ok(Map.of("omniflux.security.query-timeout", timeout)),
+                    () -> 384L << 20);
+            var error = assertThrows(IllegalStateException.class, validator::validate);
+            assertTrue(error.getMessage().contains("query-timeout"));
+        }
+        assertDoesNotThrow(new StartupValidator(ok(Map.of("omniflux.security.query-timeout", "1ms")),
+                () -> 384L << 20)::validate);
+    }
+
     // REGRESSION. An earlier version supplied the SAME heap figure it asserted
     // against, so it passed an implementation that never consulted the runtime.
     // The heap is now an injectable LongSupplier, defaulting to Runtime::maxMemory.

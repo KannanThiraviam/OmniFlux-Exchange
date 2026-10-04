@@ -31,7 +31,7 @@ public class JobRepository {
     private static final String WORKER_ID_BLANK_ERROR = "workerId must not be blank";
     private static final String GATE_MISMATCH_ERROR = "admission_gate.max_concurrent=%d disagrees with omniflux.queue.max-concurrent=%d";
     private static final Pattern ATTEMPT_KEY = Pattern.compile(
-            "(?:^|/)([0-9a-fA-F]{8}-[0-9a-fA-F-]{27,})/a(\\d+)/data\\.[^/]+$");
+            "(?:^|/)([0-9a-fA-F]{8}-[0-9a-fA-F-]{27,})/a(\\d+)(?:/c([0-9a-fA-F-]{36}))?/data\\.[^/]+$");
 
     // Column and parameter names shared between the SQL text and the bind/row
     // mapping calls. Keeping them in constants keeps each .bind(...) and
@@ -41,6 +41,8 @@ public class JobRepository {
     private static final String COL_OBJECT_KEY = "object_key";
     private static final String COL_ROW_COUNT = "row_count";
     private static final String COL_BYTE_COUNT = "byte_count";
+    private static final String COL_MAX_CONCURRENT = "max_concurrent";
+    private static final String JOB_ID_REQUIRED = "jobId";
     private static final String COL_CONTENT_SHA256 = "content_sha256";
     private static final String COL_HIGH_WATER_KEY = "high_water_key";
     private static final String COL_TIMING_JSON = "timing_json";
@@ -154,7 +156,7 @@ public class JobRepository {
         Mono<TransferJob> operation = lockAdmissionGate()
                 .then(database.sql("SELECT max_concurrent FROM admission_gate WHERE id = 1")
                         .map((row, metadata) -> Objects.requireNonNull(
-                                row.get("max_concurrent", Integer.class), "max_concurrent"))
+                                row.get(COL_MAX_CONCURRENT, Integer.class), COL_MAX_CONCURRENT))
                         .one())
                 .flatMap(databaseLimit -> inProgressCount().flatMap(active -> {
                     int configuredLimit = properties.queue().maxConcurrent();
@@ -177,7 +179,7 @@ public class JobRepository {
     }
 
     public Mono<Boolean> renewLease(UUID jobId, UUID claimToken, Duration leaseDuration) {
-        Objects.requireNonNull(jobId, "jobId");
+        Objects.requireNonNull(jobId, JOB_ID_REQUIRED);
         Objects.requireNonNull(claimToken, "claimToken");
         Objects.requireNonNull(leaseDuration, "leaseDuration");
         long seconds = Math.max(1L, leaseDuration.toSeconds());
@@ -202,7 +204,7 @@ public class JobRepository {
      * another pod's job. Completion overwrites this with the final count.
      */
     public Mono<Boolean> updateProgress(UUID jobId, UUID claimToken, long rowsSoFar) {
-        Objects.requireNonNull(jobId, "jobId");
+        Objects.requireNonNull(jobId, JOB_ID_REQUIRED);
         Objects.requireNonNull(claimToken, "claimToken");
         return database.sql("""
                 UPDATE transfer_jobs
@@ -232,6 +234,7 @@ public class JobRepository {
                        error_class = NULL, error_code = NULL, error_message = NULL
                  WHERE id = :id AND claim_token = :claim_token AND status = 'IN_PROGRESS'
                    AND cancel_requested = FALSE
+                   AND lease_until >= clock_timestamp()
                 """)
                 .bind("id", jobId)
                 .bind(COL_CLAIM_TOKEN, claimToken)
@@ -246,7 +249,12 @@ public class JobRepository {
                                 new AttemptOutcome(objectKey, rowCount, byteCount,
                                         contentSha256)).thenReturn(true)
                         : Mono.just(false));
-        return transactions.transactional(operation);
+        // Acquire the row lock before evaluating the wall-clock expiry guard.
+        // An UPDATE can otherwise qualify a row, wait on its lock, and publish
+        // after the lease expires without reevaluating an unchanged row.
+        Mono<Boolean> locked = database.sql("SELECT id FROM transfer_jobs WHERE id = :id FOR UPDATE")
+                .bind("id", jobId).fetch().one().then(operation);
+        return transactions.transactional(locked);
     }
 
     public Mono<Boolean> markCompleted(UUID jobId, UUID claimToken, JobResult result) {
@@ -508,7 +516,7 @@ public class JobRepository {
 
     /** Owner-scoped durable attempt history for the operator and user views. */
     public Flux<JobAttempt> listAttempts(UUID jobId, PrincipalKey owner) {
-        Objects.requireNonNull(jobId, "jobId");
+        Objects.requireNonNull(jobId, JOB_ID_REQUIRED);
         Objects.requireNonNull(owner, OWNER_REQUIRED);
         return database.sql("""
                 SELECT a.*
@@ -536,6 +544,28 @@ public class JobRepository {
         } catch (IllegalArgumentException _) {
             return Mono.just(false);
         }
+        // New keys identify a claim independently of the retry budget. Shutdown
+        // can restore that budget without making old uploads belong to a new claim.
+        if (matcher.group(3) != null) {
+            UUID storageClaim;
+            try {
+                storageClaim = UUID.fromString(matcher.group(3));
+            } catch (IllegalArgumentException _) {
+                return Mono.just(false);
+            }
+            return database.sql("""
+                    SELECT EXISTS (
+                        SELECT 1 FROM transfer_jobs
+                         WHERE id = :id AND object_key IS DISTINCT FROM :object_key
+                           AND (claim_token IS DISTINCT FROM :storage_claim
+                                OR status <> 'IN_PROGRESS' OR lease_until < now())
+                    ) AS expired
+                    """)
+                    .bind("id", jobId).bind("storage_claim", storageClaim).bind(COL_OBJECT_KEY, objectKey)
+                    .map((row, metadata) -> Boolean.TRUE.equals(row.get("expired", Boolean.class)))
+                    .one().defaultIfEmpty(false);
+        }
+        // Retain support for objects written before claim-specific keys.
         return database.sql("""
                 SELECT EXISTS (
                     SELECT 1 FROM transfer_jobs
@@ -543,8 +573,7 @@ public class JobRepository {
                        AND object_key IS DISTINCT FROM :object_key
                        AND (
                             attempt_count > :attempt
-                            OR (attempt_count = :attempt AND status = 'QUEUED' AND attempt_count > 0)
-                            OR (attempt_count = :attempt AND status IN ('FAILED', 'CANCELLED'))
+                            OR status <> 'IN_PROGRESS'
                             OR (attempt_count = :attempt AND status = 'IN_PROGRESS'
                                 AND lease_until < now())
                        )
@@ -737,7 +766,7 @@ public class JobRepository {
     public Mono<Boolean> admissionGateMatchesConfiguration() {
         return database.sql("SELECT max_concurrent FROM admission_gate WHERE id = 1")
                 .map((row, metadata) -> Objects.requireNonNull(
-                        row.get("max_concurrent", Integer.class), "max_concurrent"))
+                        row.get(COL_MAX_CONCURRENT, Integer.class), COL_MAX_CONCURRENT))
                 .one()
                 .map(databaseLimit -> databaseLimit == properties.queue().maxConcurrent())
                 .defaultIfEmpty(false);

@@ -29,7 +29,7 @@ Flyway applies pending schema migrations during application startup. If startup 
 | `omniflux_jobs_active` | gauge | Active jobs visible to this database |
 | `omniflux_jobs_worker_active` | gauge | Jobs executing on this pod |
 | `omniflux_jobs_claimed_total` | counter | Jobs this pod has claimed |
-| `omniflux_jobs_finished_total{outcome}` | counter | Finished attempts by emitted outcome: `completed`, `failed`, `lease_lost`; running cancellation currently also reports `lease_lost` |
+| `omniflux_jobs_finished_total{outcome}` | counter | Finished attempts by emitted outcome: `completed`, `failed`, `lease_lost`, `cancelled`, `shutdown`; owner cancellation reports `cancelled`, and drain-timeout disposal reports `shutdown` |
 | `omniflux_jobs_execution_seconds{outcome}` | histogram | Attempt duration |
 | `omniflux_jobs_rows_per_second` | gauge | Five-minute completed-row throughput |
 | `omniflux_jobs_cache_hit_rate` | gauge | Five-minute cache-hit ratio |
@@ -67,13 +67,19 @@ Symptoms: jobs remain `QUEUED`, workers are not claiming work, or the poller rep
 
 ## Expired leases and retries
 
-Workers renew leases independently. Expired `IN_PROGRESS` work is handled by the lease sweeper and requeued while attempts remain; after the configured maximum, the job becomes terminal. Inspect job detail and attempt history before retrying. A manual retry restarts the export from the beginning. A replaced token rejects old worker database updates. Lease-expiry publication and shutdown object-key reuse remain open gaps; see [Implementation status](IMPLEMENTATION_STATUS.md#known-correctness-gaps).
+Workers renew leases independently. Expired `IN_PROGRESS` work is handled by the lease sweeper and requeued while attempts remain; after the configured maximum, the job becomes terminal. Inspect job detail and attempt history before retrying. A manual retry restarts the export from the beginning. A replaced token rejects old worker database updates. Completion also requires an unexpired lease at the database update. New object keys include the claim token, so a shutdown retry uses a different key even when its attempt count is reused.
 
 Repeated `LEASE_LOST` errors may indicate database latency, overloaded workers, clock/lease configuration problems, or shutdowns exceeding the drain window. Compare attempt timestamps, replica logs, and configured lease-renew interval/deadline.
 
+A running owner's cancellation request is observed through lease renewal, normally at the next configured renewal interval (default 15 seconds). The cancellation API records a request; it does not promise that execution has already stopped. Check job status and attempt history for the terminal `CANCELLED` state. Owner cancellations emit `cancelled`, including cancellation completed by the sweeper or a failure race; they do not count as `lease_lost`.
+
+## R2DBC query deadlines
+
+`omniflux.security.query-timeout` defaults to `30s` and must be at least one millisecond. It bounds each high-water, XLSX count, and page query individually, including client connection acquisition and result delivery. PostgreSQL receives a transaction-local `statement_timeout` for the SQL statement. Cancellation or timeout rolls back the query transaction; the timeout setting does not remain on the pooled connection. A query timeout is reported as `QUERY_TIMEOUT` and follows the existing transient-failure retry policy. A long export can exceed 30 seconds in total if every individual query meets its deadline. This setting does not configure the REST adapter or storage request timeouts.
+
 ## Graceful shutdown and deploys
 
-On SIGTERM, the queue poller stops accepting claims and workers drain for `omniflux.queue.drain-timeout` (default 30 seconds, maximum 40 seconds). Platform termination grace must exceed the application drain timeout plus enough time for process exit. If draining times out, the active attempt is requeued and its work may restart from row one. Plan rollout capacity accordingly; monitor queued jobs and attempts during deployment.
+On SIGTERM, the queue poller stops accepting claims and workers drain for `omniflux.queue.drain-timeout` (default 30 seconds, maximum 40 seconds). Platform termination grace must exceed the application drain timeout plus enough time for process exit. If draining times out, execution is cancelled before the claim is requeued. The retry budget is restored, and the next claim restarts from row one with a new claim token and object key. Plan rollout capacity accordingly; monitor queued jobs and attempts during deployment.
 
 ## Multipart upload cleanup
 

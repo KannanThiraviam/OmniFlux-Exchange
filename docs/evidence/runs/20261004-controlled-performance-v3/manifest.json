@@ -1,0 +1,36 @@
+{
+  "startedAt": "2026-10-04T03:28:24.4951809Z",
+  "baselineCommit": "a1fb3bfeae20173d510ff4c9f1bcfc94035e437c",
+  "baselineJarSha256": "bed1c9fcb2d56920decebdecb3863b0295a2cda045f920cc96fe19fe804df729",
+  "latestJarSha256": "bb7b9e9f4fd1516e9d3a63faf5997384f1215d0bb6bdc10a7e21e940cc038972",
+  "trackedSourceDiffSha256": "3dfe47c5eb13a29fb535e3b45b060bea5bff65723643bd1c757f2a124e7cd8e9",
+  "runtimeImageId": "sha256:3137541deb3cac6626b5d9a4a2187bc0d6a34312f858bd2c67dd01e732e6b682",
+  "runnerJava": "openjdk version \"25.0.4.1\" 2026-08-18 LTS\r\nOpenJDK Runtime Environment Temurin-25.0.4.1+1 (build 25.0.4.1+1-LTS)\r\nOpenJDK 64-Bit Server VM Temurin-25.0.4.1+1 (build 25.0.4.1+1-LTS, mixed mode, sharing)",
+  "dockerVersion": "29.8.1",
+  "cpus": 2,
+  "memoryBytes": 536870912,
+  "heap": "320m",
+  "directMemory": "64m",
+  "cacheEnabled": false,
+  "seed": false,
+  "relation": "mock_customers",
+  "readOnly": true,
+  "tmpfs": "16m",
+  "runner": "same latest StreamingRunner for both builds",
+  "blockOrder": [
+    "baseline",
+    "latest",
+    "latest",
+    "baseline"
+  ],
+  "warmupsPerCellPerBlock": 1,
+  "measuredRepetitionsPerCellPerBlock": 3,
+  "primaryMetric": "worker exportMillis, excluding queue wait and client download",
+  "secondaryMetrics": [
+    "totalMillis",
+    "peakHeapBytes",
+    "peakRssBytes",
+    "peakCgroupBytes"
+  ],
+  "limits": "Warm local fixture; fixed small sample on a shared Docker Desktop host; not a production load test."
+}

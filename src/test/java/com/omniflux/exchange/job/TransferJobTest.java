@@ -33,12 +33,18 @@ class TransferJobTest {
     }
 
     @Test
-    void attemptKeyIsScopedByJobAndAttempt() {
+    void attemptKeyIsScopedByClaimEvenWhenShutdownReusesTheAttemptNumber() {
         UUID id = UUID.randomUUID();
+        UUID claim = UUID.randomUUID();
         TransferJob job = TransferJob.builder().id(id).owner(OWNER)
-                .relationName("mock_orders").format("CSV").attemptCount(2).build();
+                .relationName("mock_orders").format("CSV").attemptCount(2).claimToken(claim).build();
 
-        assertEquals("exports/" + id + "/a2/data.csv", job.attemptObjectKey("exports/", ".csv"));
+        assertEquals("exports/" + id + "/a2/c" + claim + "/data.csv",
+                job.attemptObjectKey("exports/", ".csv"));
+        assertNotEquals(job.attemptObjectKey("exports/", ".csv"),
+                job.toBuilder().claimToken(UUID.randomUUID()).build().attemptObjectKey("exports/", ".csv"));
+        assertThrows(NullPointerException.class,
+                () -> job.toBuilder().claimToken(null).build().attemptObjectKey("exports/", ".csv"));
     }
 
     @Test

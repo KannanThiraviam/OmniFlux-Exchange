@@ -16,8 +16,8 @@ To maintain this site, use Python 3.12 or later and `uv` (a Python package/envir
 
 ```powershell
 $env:UV_CACHE_DIR = "$PWD/.tmp_logs/uv-cache"
-uv venv .tmp_logs/docs-venv
-uv pip install --python .tmp_logs/docs-venv/Scripts/python.exe -r docs-requirements.txt
+uv venv --seed .tmp_logs/docs-venv
+uv pip install --python .tmp_logs/docs-venv/Scripts/python.exe --require-hashes --only-binary :all: -r docs-requirements.lock
 .tmp_logs/docs-venv/Scripts/mkdocs.exe serve
 ```
 
@@ -31,6 +31,17 @@ pwsh -File scripts/quality-gate.ps1 -RepositoryOnly
 ```
 
 On Unix, use `.tmp_logs/docs-venv/bin/python` and `.tmp_logs/docs-venv/bin/mkdocs`. Generated output stays under `.tmp_logs/` and is ignored by Git.
+
+## Updating documentation dependencies
+
+`docs-requirements.txt` declares the direct documentation dependency. `docs-requirements.lock` pins every resolved version and its hashes; local setup and GitHub Actions install from the lockfile using wheels only. Regenerate it when changing the input requirement:
+
+```powershell
+$env:UV_CACHE_DIR = "$PWD/.tmp_logs/uv-cache"
+uv pip compile docs-requirements.txt --generate-hashes --only-binary :all: --output-file docs-requirements.lock
+```
+
+Review and commit both files, install the regenerated lockfile, and rebuild the site. `--seed` installs pip in the local environment so an authenticated Snyk pip scan can inspect it. Snyk remains optional; see [external security checks](QUALITY_GATES.md#optional-external-security-checks-in-both-hooks).
 
 ## Writing conventions
 
